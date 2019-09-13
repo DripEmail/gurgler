@@ -95,6 +95,8 @@ const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitBranch, gi
 
   //TODO upload map file if it exists.
 
+  // TODO send source maps to Honeybadger (but maybe just the ones we deploy)
+
   fs.readFile(localFilePath, (err, data) => {
     if (err) {
       throw err;
@@ -132,24 +134,39 @@ const getAssets = (bucketName, prefix) => {
   });
 
   return new Promise((resolve, reject) => {
-    s3.listObjectsV2({
-      Bucket: bucketName,
-      Prefix: prefix
-    }, function (err, assets) {
-      if (err) {
-        return reject(err);
+    let allKeys = [];
+
+    const listAllKeys = (token) => {
+      const opts = {
+        Bucket: bucketName,
+        Prefix: prefix,
+      };
+
+      if (token) {
+        opts.ContinuationToken = token;
       }
 
-      return resolve(
-        assets.Contents.map(asset => {
-          return {
-            filePath: asset.Key,
-            lastModified: asset.LastModified,
-            buckets: [ bucketName ]
-          };
-        })
-      );
-    });
+      s3.listObjectsV2(opts, (err, data) => {
+        if (err) {
+          reject()
+        }
+        allKeys = allKeys.concat(data.Contents);
+
+        if (data.IsTruncated){
+          listAllKeys(data.NextContinuationToken);
+        }
+        else {
+          resolve(allKeys.map(asset => {
+            return {
+              filePath: asset.Key,
+              lastModified: asset.LastModified,
+              bucket: bucketName
+            };
+          }));
+        }
+      });
+    };
+    listAllKeys();
   });
 };
 
@@ -208,7 +225,7 @@ const addGitSha = (asset) => {
 
   return new Promise((resolve, reject) => {
     s3.headObject({
-      Bucket: asset.buckets[0],
+      Bucket: asset.bucket,
       Key: asset.filePath
     }, (err, data) => {
       if (err) {
@@ -285,8 +302,9 @@ const currentParameters = (ssmKeys, assets) => {
   });
 };
 
+// TODO Pass in any cli parameters and skip the questions when possible.
+const askQuestions = (environments, assets, parameters, environment, checksum) => {
 
-const askQuestions = (environments, assets, parameters) => {
   const questions = [
     {
       type: 'list',
@@ -331,6 +349,7 @@ program
   .description('sends a new asset (at a particular commit on a particular branch) to the S3 bucket')
   .action((gitCommitSha, gitBranch) => {
     localFilePaths.forEach(localFilePath => {
+      // TODO verify the parameters (gitCommitSha, gitBranch)
       readFileAndDeploy( bucketNames, bucketPath, localFilePath, gitBranch, gitCommitSha );
     });
 
@@ -342,14 +361,14 @@ program
   .description('takes a previously deployed asset a turns it on for a particular environment')
   .option("-e, --environment <environment>", "environment to deploy to")
   .option("-c, --checksum <checksum>", "the checksum of the asset to deploy")
-  .action((environment, checksum) => {
+  .action((cmdObj) => {
     // Get all the assets from all the buckets
     Promise.all(
       bucketNames.map(bucketName => getAssets(bucketName, bucketPath))
     )
       .then(assetsLists => {
       // Merge all the assets from all the buckets into 1 array
-      return new Promise((resolve, reject) => {
+      return new Promise((resolve) => {
         resolve(_.unionWith(...assetsLists, _.isEqual))
       });
       })
@@ -367,8 +386,9 @@ program
         return currentParameters(ssmKeys, assets);
       })
       .then(({ assets, parameters }) => {
-        return askQuestions(environments, assets, parameters);
-      });
+        return askQuestions(environments, assets, parameters, cmdObj.environment, cmdObj.checksum);
+      })
+      .catch(err => console.error(err));
 
   });
 
