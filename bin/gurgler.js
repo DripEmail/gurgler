@@ -289,29 +289,51 @@ const currentParameters = (ssmKeys, assets) => {
 };
 
 // TODO Pass in any cli parameters and skip the questions when possible.
-const askQuestions = (environments, assets, parameters, environment, checksum) => {
-  const questions = [
-    {
-      type: 'list',
-      name: 'environment',
-      message: 'Which environment will receive this release?',
-      choices: environments.map(env => {
-        const checksum = currentlyReleasedChecksum(parameters, env);
-        return {
-          name: `${env.label} ${checksum}`,
-          value: env.key
-        }
-      })
-    },
-    {
-      type: 'list',
-      name: 'checksum',
-      message: 'Which deployed version would you like to release?',
-      choices: assets.map(asset => {
-        return { name: asset.displayName, value: asset.checksum }
-      })
+const askQuestions = (environments, assets, parameters, environmentKey, checksum) => {
+
+  const questions = [];
+
+  if (environmentKey) {
+    const environment = _.find(environments, e => e.key === environmentKey);
+    if (!environment) {
+      const keys = environments.map(e => e.key);
+      const keysStr = _.join(keys, ", ");
+      console.error(`"${environmentKey}" does not appear to be a valid environment. The choices are: ${keysStr}`);
+      process.exit(1);
     }
-  ];
+  }
+  else {
+    questions.push(
+      {
+        type: 'list',
+        name: 'environment',
+        message: 'Which environment will receive this release?',
+        choices: environments.map(env => {
+          const checksum = currentlyReleasedChecksum(parameters, env);
+          return {
+            name: `${env.label} ${checksum}`,
+            value: env.key
+          }
+        })
+      }
+    )
+  }
+
+  if (checksum) {
+    // TODO Check checksum
+  }
+  else {
+    questions.push(
+      {
+        type: 'list',
+        name: 'checksum',
+        message: 'Which deployed version would you like to release?',
+        choices: assets.map(asset => {
+          return { name: asset.displayName, value: asset.checksum }
+        })
+      }
+    )
+  }
 
   return inquirer.prompt(questions).then(answers => {
     const asset = _.find(assets, (asset) => {
@@ -376,6 +398,5 @@ program
       .catch(err => console.error(err));
 
   });
-
 
 program.parse(process.argv);
