@@ -171,28 +171,16 @@ const getAssets = (bucketName, prefix) => {
 };
 
 
-const envToParamKey = (environment) => {
-  switch (environment) {
-    case 'privatefe1':
-      return '/elm-production/privatefe1_checksum';
-    case 'privatefe2':
-      return '/elm-production/privatefe2_checksum';
-    case 'staging':
-      return '/elm-staging/checksum';
-    case 'production':
-      return '/elm-production/checksum';
-  }
-};
+const currentlyReleasedChecksum = (parameters, environment) => {
 
-
-const fetchCurrentlyReleasedChecksum = (parameters, environment) => {
   const currentlyReleasedChecksum = _.result(_.find(parameters, (parameter) => {
-    return parameter.Name === envToParamKey(environment);
+    return parameter.Name === environment.ssmKey;
   }), 'Value');
 
   if (currentlyReleasedChecksum === '' || currentlyReleasedChecksum === undefined) {
     return ' | (Unreleased!)';
   }
+  // TODO make 'elm' something... else
   return ' | elm[' + currentlyReleasedChecksum.substring(0, 7) + ']';
 };
 
@@ -216,7 +204,6 @@ const formatAndLimitAssets = (assets, size) => {
 
   return returnedAssets;
 };
-
 
 const addGitSha = (asset) => {
   const s3 = new AWS.S3({
@@ -242,7 +229,6 @@ const addGitSha = (asset) => {
     });
   });
 };
-
 
 const addGitInfo = (asset) => {
   const gitSha = asset.gitSha;
@@ -304,14 +290,13 @@ const currentParameters = (ssmKeys, assets) => {
 
 // TODO Pass in any cli parameters and skip the questions when possible.
 const askQuestions = (environments, assets, parameters, environment, checksum) => {
-
   const questions = [
     {
       type: 'list',
       name: 'environment',
       message: 'Which environment will receive this release?',
       choices: environments.map(env => {
-        const checksum = fetchCurrentlyReleasedChecksum(parameters, env.key);
+        const checksum = currentlyReleasedChecksum(parameters, env);
         return {
           name: `${env.label} ${checksum}`,
           value: env.key
