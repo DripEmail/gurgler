@@ -292,6 +292,7 @@ const currentParameters = (ssmKeys, assets) => {
 const askQuestions = (environments, assets, parameters, environmentKey, checksum) => {
 
   const questions = [];
+  let answers = {};
 
   if (environmentKey) {
     const environment = _.find(environments, e => e.key === environmentKey);
@@ -301,6 +302,7 @@ const askQuestions = (environments, assets, parameters, environmentKey, checksum
       console.error(`"${environmentKey}" does not appear to be a valid environment. The choices are: ${keysStr}`);
       process.exit(1);
     }
+    answers.environment = environment;
   }
   else {
     questions.push(
@@ -320,26 +322,38 @@ const askQuestions = (environments, assets, parameters, environmentKey, checksum
   }
 
   if (checksum) {
-    // TODO Check checksum
+    const asset = _.find(assets, asset => {
+      return asset.checksum === checksum
+    });
+
+    // TODO If we do not find it in this list of assets, check the rest of them too.
+
+    if (!asset) {
+      console.error(`"${checksum}" does not appear to be a valid checksum.`);
+      process.exit(1);
+    }
+
+    answers.checksum = checksum;
   }
   else {
-    questions.push(
-      {
-        type: 'list',
-        name: 'checksum',
-        message: 'Which deployed version would you like to release?',
-        choices: assets.map(asset => {
-          return { name: asset.displayName, value: asset.checksum }
-        })
-      }
-    )
+    questions.push({
+      type: 'list',
+      name: 'checksum',
+      message: 'Which deployed version would you like to release?',
+      choices: assets.map(asset => {
+        return { name: asset.displayName, value: asset.checksum }
+      })
+    });
   }
 
-  return inquirer.prompt(questions).then(answers => {
-    const asset = _.find(assets, (asset) => {
+  return inquirer.prompt(questions).then(questionAnswers => {
+    answers =  _.merge(answers, questionAnswers);
+
+    answers.asset = _.find(assets, (asset) => {
       return asset.checksum === answers.checksum;
     });
-    return _.merge(answers, { asset: asset });
+
+    return answers
   });
 };
 
@@ -394,6 +408,8 @@ program
       })
       .then(({ assets, parameters }) => {
         return askQuestions(environments, assets, parameters, cmdObj.environment, cmdObj.checksum);
+      }).then(({environment, checksum, asset}) => {
+        console.log("choices", environment, checksum, asset);
       })
       .catch(err => console.error(err));
 
