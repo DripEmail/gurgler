@@ -77,7 +77,6 @@ AWS.config.update({
  * *****************
  */
 
-
 /**
  * Send the asset up to S3.
  *
@@ -127,7 +126,6 @@ const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitBranch, gi
   });
 };
 
-
 const getAssets = (bucketName, prefix) => {
   const s3 = new AWS.S3({
     apiVersion: '2006-03-01'
@@ -169,7 +167,6 @@ const getAssets = (bucketName, prefix) => {
     listAllKeys();
   });
 };
-
 
 const currentlyReleasedChecksum = (parameters, environment) => {
 
@@ -288,8 +285,7 @@ const currentParameters = (ssmKeys, assets) => {
   });
 };
 
-// TODO Pass in any cli parameters and skip the questions when possible.
-const askQuestions = (environments, assets, parameters, environmentKey, checksum) => {
+const askQuestions = (environments, assets, parameters, environmentKey, commit) => {
 
   const questions = [];
   let answers = {};
@@ -321,27 +317,32 @@ const askQuestions = (environments, assets, parameters, environmentKey, checksum
     )
   }
 
-  if (checksum) {
+  if (commit) {
+    if (commit.length < 7) {
+      console.error(`The checksum "${commit}" is not long enough, it should be at least 7 characters.`);
+      process.exit(1);
+    }
+
     const asset = _.find(assets, asset => {
-      return asset.checksum === checksum
+      return _.startsWith(asset.gitSha, commit)
     });
 
     // TODO If we do not find it in this list of assets, check the rest of them too.
 
     if (!asset) {
-      console.error(`"${checksum}" does not appear to be a valid checksum.`);
+      console.error(`"${commit}" does not appear to be a valid checksum.`);
       process.exit(1);
     }
 
-    answers.checksum = checksum;
+    answers.commit = commit;
   }
   else {
     questions.push({
       type: 'list',
-      name: 'checksum',
+      name: 'commit',
       message: 'Which deployed version would you like to release?',
       choices: assets.map(asset => {
-        return { name: asset.displayName, value: asset.checksum }
+        return { name: asset.displayName, value: asset.gitSha }
       })
     });
   }
@@ -350,10 +351,10 @@ const askQuestions = (environments, assets, parameters, environmentKey, checksum
     answers =  _.merge(answers, questionAnswers);
 
     answers.asset = _.find(assets, (asset) => {
-      return asset.checksum === answers.checksum;
+      return asset.gitSha === answers.commit;
     });
 
-    return answers
+    return answers;
   });
 };
 
@@ -381,7 +382,7 @@ program
   .command('release')
   .description('takes a previously deployed asset a turns it on for a particular environment')
   .option("-e, --environment <environment>", "environment to deploy to")
-  .option("-c, --checksum <checksum>", "the checksum of the asset to deploy")
+  .option("-c, --commit <gitSha>", "the git sha (commit) of the asset to deploy")
   .action((cmdObj) => {
     // Get all the assets from all the buckets
     Promise.all(
@@ -407,9 +408,9 @@ program
         return currentParameters(ssmKeys, assets);
       })
       .then(({ assets, parameters }) => {
-        return askQuestions(environments, assets, parameters, cmdObj.environment, cmdObj.checksum);
-      }).then(({environment, checksum, asset}) => {
-        console.log("choices", environment, checksum, asset);
+        return askQuestions(environments, assets, parameters, cmdObj.environment, cmdObj.commit);
+      }).then(({environment, commit, asset}) => {
+        console.log("choices", environment, commit, asset);
       })
       .catch(err => console.error(err));
 
