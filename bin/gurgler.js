@@ -168,17 +168,15 @@ const getAssets = (bucketName, prefix) => {
   });
 };
 
-const currentlyReleasedChecksum = (parameters, environment) => {
+const currentlyReleasedSummary = (parameters, environment) => {
 
   const currentlyReleasedChecksum = _.result(_.find(parameters, (parameter) => {
     return parameter.Name === environment.ssmKey;
   }), 'Value');
 
-  if (currentlyReleasedChecksum === '' || currentlyReleasedChecksum === undefined) {
-    return ' | (Unreleased!)';
-  }
-  // TODO make 'elm' something... else
-  return ' | elm[' + currentlyReleasedChecksum.substring(0, 7) + ']';
+  const currentlyReleasedStr = _.isEmpty(currentlyReleasedChecksum) ? "Unreleased!" : currentlyReleasedChecksum.substring(0, 7);
+
+  return ` | ${packageName}[${currentlyReleasedStr}]`;
 };
 
 const formatAndLimitAssets = (assets, size) => {
@@ -307,9 +305,10 @@ const askQuestions = (environments, assets, parameters, environmentKey, commit) 
         name: 'environment',
         message: 'Which environment will receive this release?',
         choices: environments.map(env => {
-          const checksum = currentlyReleasedChecksum(parameters, env);
+          const checksum = currentlyReleasedSummary(parameters, env);
+          const label = _.padEnd(env.label, 12);
           return {
-            name: `${env.label} ${checksum}`,
+            name: `${label} ${checksum}`,
             value: env.key
           }
         })
@@ -327,7 +326,7 @@ const askQuestions = (environments, assets, parameters, environmentKey, commit) 
       return _.startsWith(asset.gitSha, commit)
     });
 
-    // TODO If we do not find it in this list of assets, check the rest of them too.
+    // TODO If we do not find it in this list of assets, check older assets too.
 
     if (!asset) {
       console.error(`"${commit}" does not appear to be a valid checksum.`);
