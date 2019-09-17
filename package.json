@@ -8,6 +8,7 @@
   "license": "MIT",
   "private": false,
   "dependencies": {
+    "@slack/webhook": "^5.0.1",
     "aws-sdk": "^2.525.0",
     "commander": "^3.0.1",
     "crypto-js": "^3.1.9-1",

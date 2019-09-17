@@ -7,6 +7,7 @@ const path = require('path');
 const _ = require('lodash');
 const crypto = require('crypto');
 const NodeGit = require('nodegit');
+const { IncomingWebhook } = require('@slack/webhook');
 
 
 /**
@@ -24,6 +25,7 @@ const bucketNames = gurglerConfig["bucketNames"];
 const bucketPath = gurglerConfig["bucketPath"];
 const bucketRegion = gurglerConfig["bucketRegion"];
 const localFilePaths = gurglerConfig["localFilePaths"];
+const slackWebHookUrl = gurglerConfig["slackWebHookUrl"];
 
 if (_.isEmpty(packageName)) {
   console.error("The package name is not set.");
@@ -193,6 +195,7 @@ const formatAndLimitAssets = (assets, size) => {
 
     if (filename !== '' && filename !== undefined) {
       asset.checksum = filename.split('.')[2];
+      asset.checksumDigest = asset.checksum.substr(0, 7);
       returnedAssets.push(asset);
     }
   });
@@ -218,6 +221,7 @@ const addGitSha = (asset) => {
       if (metaData !== '' && metaData !== undefined) {
         const parsedMetaData = metaData.split('|');
         asset.gitSha = parsedMetaData[0];
+        asset.gitShaDigest = parsedMetaData[0].substr(0, 7);
         asset.gitBranch = parsedMetaData[1];
       }
       return resolve(asset);
@@ -358,6 +362,79 @@ const askQuestions = (environments, assets, parameters, environmentKey, commit) 
 };
 
 
+const confirmRelease = (environment, asset) => {
+
+  console.log("asset", asset);
+
+  const questions = [
+    {
+      type: 'confirm',
+      name: 'confirmation',
+      message: `Do you want to release ${packageName} git[${asset.gitShaDigest}] checksum[${asset.checksumDigest}] to ${environment.key}?`,
+      default: false
+    }
+  ];
+
+  return inquirer.prompt(questions).then(answers => {
+    if (answers.confirmation) {
+      //release(environment, checksum, asset);
+    } else {
+      console.log("Cancelling release...");
+    }
+  });
+};
+
+const release = (environment, asset) => {
+  const ssm = new AWS.SSM({
+    apiVersion: '2014-11-06'
+  });
+
+  const ssmKey = environment.ssmKey;
+
+  const ssmParams = {
+    Name: ssmKey,
+    Value: asset.checksum,
+    Type: 'String',
+    Overwrite: true
+  };
+  ssm.putParameter(ssmParams, (err, data) => {
+    if (err) {
+      throw err;
+    }
+    sendReleaseMessage(environment, asset);
+  });
+};
+
+const sendReleaseMessage = (environment, asset) => {
+  const deployer = process.env.USER;
+  const simpleMessage = `${deployer} successfully released elm asset ${packageName}[] to ${environment.key}`;
+
+  const slackMessage = [
+    `*${deployer}* successfully released a new ${packageName} asset to *${environment.key}*`,
+    `_${asset.displayName}`,
+    `<https://github.com/DripEmail/drip-elm/commit/${asset.gitSha}|View commit on GitHub>`,
+  ].join("\n");
+
+  const slackChannel = environment.slackChannel;
+
+  if (!_.isEmpty(slackWebHookUrl) && !_.isEmpty(slackChannel)) {
+    const webhook = new IncomingWebhook(slackWebHookUrl);
+
+    (async () => {
+      await webhook.send({
+        username: "elm",
+        text: slackMessage,
+        icon_emoji: ":elm:",
+        channel: slackChannel
+      })
+    })();
+  }
+
+  console.log(simpleMessage);
+};
+
+
+
 /**
  * *****************
  * The "main" part of the program.
@@ -409,7 +486,7 @@ program
       .then(({ assets, parameters }) => {
         return askQuestions(environments, assets, parameters, cmdObj.environment, cmdObj.commit);
       }).then(({environment, commit, asset}) => {
-        console.log("choices", environment, commit, asset);
+        confirmRelease(environment, asset)
       })
       .catch(err => console.error(err));
 
