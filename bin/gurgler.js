@@ -26,6 +26,8 @@ const bucketPath = gurglerConfig["bucketPath"];
 const bucketRegion = gurglerConfig["bucketRegion"];
 const localFilePaths = gurglerConfig["localFilePaths"];
 const slackWebHookUrl = gurglerConfig["slackWebHookUrl"];
+const slackUsername = gurglerConfig["slackUsername"];
+const slackIconEmoji = gurglerConfig["slackIconEmoji"];
 
 if (_.isEmpty(packageName)) {
   console.error("The package name is not set.");
@@ -68,6 +70,21 @@ localFilePaths.forEach(path => {
     process.exit(1);
   }
 });
+
+if (_.isEmpty(slackWebHookUrl)) {
+  console.error("The config value slackWebHookUrl is not set.");
+  process.exit(1);
+}
+
+if (_.isEmpty(slackUsername)) {
+  console.error("The config value slackUsername is not set.");
+  process.exit(1);
+}
+
+if (_.isEmpty(slackIconEmoji)) {
+  console.error("The config value slackIconEmoji is not set.");
+  process.exit(1);
+}
 
 AWS.config.update({
   region: bucketRegion
@@ -239,27 +256,28 @@ const addGitInfo = (asset) => {
     .catch(err => {
       if (!(err.message.match(/unable to parse OID/)
         || err.message.match(/no match for id/))) {
-        console.log('Warning, could not get commit: git[' + gitSha + '],', err.message.replace(/(\r\n|\n|\r)/gm, ''));
+        console.log(`Warning, could not get commit: git[${gitSha}],`, err.message.replace(/(\r\n|\n|\r)/gm, ''));
       }
       return undefined;
     })
     .then(commit => {
       if (commit === undefined) {
-        asset.displayName = asset.lastModified.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
-        asset.displayName += (' | elm[' + asset.checksum.substring(0, 7) + ']');
+        asset.displayName = asset.lastModified.toLocaleDateString(
+          'en-US',
+          { month: '2-digit', day: '2-digit', year: 'numeric' }
+          );
+        const checksumShort = asset.checksum.substring(0, 7);
+        asset.displayName += (` | ${packageName}[${checksumShort}]`);
         return asset;
       }
 
       const author = commit.author();
-      asset.displayName = commit.date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
-      asset.displayName += (' | elm[' + asset.checksum.substring(0, 7) + ']');
-      asset.displayName += (' | ' + author.name());
-      asset.displayName += (' | git[' + gitSha.substring(0, 7) + ']');
-      asset.displayName += (' | ');
-      if (asset.gitBranch !== '' && asset.gitBranch !== undefined) {
-        asset.displayName += ('[' + _.truncate(asset.gitBranch, {length: 15}) + '] ');
-      }
-      asset.displayName += (_.truncate(commit.message(), {length: 30}).replace(/(\r\n|\n|\r)/gm, ''));
+      const commitDateStr = commit.date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+      const checksumShort = asset.checksum.substring(0, 7);
+      const gitShaShort = gitSha.substring(0, 7);
+      const gitBranch = _.isEmpty(asset.gitBranch) ? "" : _.truncate(asset.gitBranch, {length: 15});
+      const gitMessage = _.truncate(commit.message(), {length: 30}).replace(/(\r\n|\n|\r)/gm, '');
+      asset.displayName = `${commitDateStr} | ${packageName}[${checksumShort}] | ${author.name()} | git[${gitShaShort}] | [${gitBranch}] ${gitMessage}`;
       return asset;
     });
 };
@@ -406,11 +424,11 @@ const release = (environment, asset) => {
 };
 
 const sendReleaseMessage = (environment, asset) => {
-  const deployer = process.env.USER;
-  const simpleMessage = `${deployer} successfully released elm asset ${packageName}[] to ${environment.key}`;
+  const userDoingDeploy = process.env.USER;
+  const simpleMessage = `${userDoingDeploy} successfully released elm asset ${packageName}[] to ${environment.key}`;
 
   const slackMessage = [
-    `*${deployer}* successfully released a new ${packageName} asset to *${environment.key}*`,
+    `*${userDoingDeploy}* successfully released a new ${packageName} asset to *${environment.key}*`,
     `_${asset.displayName}`,
     `<https://github.com/DripEmail/drip-elm/commit/${asset.gitSha}|View commit on GitHub>`,
   ].join("\n");
@@ -422,9 +440,9 @@ const sendReleaseMessage = (environment, asset) => {
 
     (async () => {
       await webhook.send({
-        username: "elm",
+        username: slackUsername,
         text: slackMessage,
-        icon_emoji: ":elm:",
+        icon_emoji: slackIconEmoji,
         channel: slackChannel
       })
     })();
