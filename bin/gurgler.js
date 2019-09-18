@@ -96,6 +96,8 @@ AWS.config.update({
  * *****************
  */
 
+const shortHash = hash => hash.substring(0, 7);
+
 /**
  * Send the asset up to S3.
  *
@@ -282,7 +284,10 @@ const addGitInfo = (asset) => {
     });
 };
 
-const currentParameters = (ssmKeys, assets) => {
+const requestCurrentlyReleasedVersions = (environments) => {
+
+  const ssmKeys = environments.map(env => env.ssmKey);
+
   const ssm = new AWS.SSM({
     apiVersion: '2014-11-06'
   });
@@ -297,10 +302,17 @@ const currentParameters = (ssmKeys, assets) => {
         return reject(err);
       }
 
-      return resolve({
-        assets: assets,
-        parameters: data.Parameters
+      const environmentsWithReleaseData = environments.map(env => {
+        const value = _.find(data.Parameters, v => env.ssmKey === v.Name);
+
+        env.releasedChecksum = _.get(value, "Value", "Unreleased!");
+        env.releaseChecksumShort = env.releasedChecksum === "Unreleased!" ? "Unreleased!" : shortHash(env.releasedChecksum)
+        env.releaseDateStr = _.get(value, "LastModifiedDate");
+
+        return env;
       });
+
+      return resolve(environmentsWithReleaseData);
     });
   });
 };
@@ -308,6 +320,7 @@ const currentParameters = (ssmKeys, assets) => {
 const askQuestions = (environments, assets, parameters, environmentKey, commit) => {
 
   const questions = [];
+  const prompts = new Rx.Subject();
   let answers = {};
 
   if (environmentKey) {
@@ -321,7 +334,7 @@ const askQuestions = (environments, assets, parameters, environmentKey, commit) 
     answers.environment = environment;
   }
   else {
-    questions.push(
+    prompts.next(
       {
         type: 'list',
         name: 'environment',
@@ -379,30 +392,8 @@ const askQuestions = (environments, assets, parameters, environmentKey, commit) 
   });
 };
 
-
-const confirmRelease = (environment, asset) => {
-
-  console.log("asset", asset);
-
-  const questions = [
-    {
-      type: 'confirm',
-      name: 'confirmation',
-      message: `Do you want to release ${packageName} git[${asset.gitShaDigest}] checksum[${asset.checksumDigest}] to ${environment.key}?`,
-      default: false
-    }
-  ];
-
-  return inquirer.prompt(questions).then(answers => {
-    if (answers.confirmation) {
-      //release(environment, checksum, asset);
-    } else {
-      console.log("Cancelling release...");
-    }
-  });
-};
-
 const release = (environment, asset) => {
+  /*
   const ssm = new AWS.SSM({
     apiVersion: '2014-11-06'
   });
@@ -421,6 +412,8 @@ const release = (environment, asset) => {
     }
     sendReleaseMessage(environment, asset);
   });
+   */
+  sendReleaseMessage(environment, asset);
 };
 
 const sendReleaseMessage = (environment, asset) => {
@@ -472,12 +465,121 @@ program
   });
 
 
+const determineEnvironment = (cmdObj) => {
+  if (_.isEmpty(cmdObj.environment)) {
+    return inquirer.prompt([ {
+      type: 'list',
+      name: 'environment',
+      message: 'Which environment will receive this release?',
+      choices: environments.map(env => {
+        const label = _.padEnd(env.label, 12);
+        return {
+          name: `${label} ${env.releaseChecksumShort}`,
+          value: env
+        }
+      })
+    }]);
+  }
+  else {
+    return new Promise(((resolve) => {
+      const environment = _.find(environments, e => e.key === cmdObj.environment);
+      if (!environment) {
+        const keys = environments.map(e => e.key);
+        const keysStr = _.join(keys, ", ");
+        console.error(`"${cmdObj.environment}" does not appear to be a valid environment. The choices are: ${keysStr}`);
+        process.exit(1);
+      }
+      resolve({environment: environment});
+    }))
+  }
+};
+
+const determineAssetToRelease = (cmdObj, enviornment) => {
+  const bucketName = _.get(bucketNames, enviornment.serverEnviroment);
+
+  return getAssets(bucketName, bucketPath)
+    .then(assets => {
+      return formatAndLimitAssets(assets, 20); // Only show last 20 assets
+    })
+    .then(assets => {
+      return Promise.all(assets.map(asset => addGitSha(asset)));
+    })
+    .then(assets => {
+      return Promise.all(assets.map(asset => addGitInfo(asset)));
+    })
+    .then(assets => {
+      if( _.isEmpty(cmdObj.commit)) {
+        return inquirer.prompt([ {
+            type: 'list',
+            name: 'commit',
+            message: 'Which deployed version would you like to release?',
+            choices: assets.map(asset => {
+                return {name: asset.displayName, value: asset}
+              }
+            )
+        }])
+      }
+      else {
+        return new Promise(((resolve) => {
+          if (cmdObj.commit.length < 7) {
+            console.error(`The checksum "${cmdObj.commit}" is not long enough, it should be at least 7 characters.`);
+            process.exit(1);
+          }
+
+          const asset = _.find(assets, asset => {
+            return _.startsWith(asset.gitSha, cmdObj.commit)
+          });
+
+          // TODO If we do not find it in this list of assets, check older assets too.
+
+          if (!asset) {
+            console.error(`"${cmdObj.commit}" does not appear to be a valid checksum.`);
+            process.exit(1);
+          }
+
+          resolve({asset: asset});
+        }));
+      }
+    })
+};
+
+const confirmRelease = (environment, asset) => {
+  return inquirer.prompt([{
+    type: 'confirm',
+    name: 'confirmation',
+    message: `Do you want to release ${packageName} git[${asset.gitShaDigest}] checksum[${asset.checksumDigest}] to ${environment.key}?`,
+    default: false
+  }]);
+};
+
 program
   .command('release')
   .description('takes a previously deployed asset a turns it on for a particular environment')
   .option("-e, --environment <environment>", "environment to deploy to")
   .option("-c, --commit <gitSha>", "the git sha (commit) of the asset to deploy")
   .action((cmdObj) => {
+
+    let environment;
+    let asset;
+    determineEnvironment(cmdObj)
+      .then(answers => {
+        environment = answers.environment;
+        return determineAssetToRelease(cmdObj, environment)
+      })
+      .then(answers => {
+        asset = answers.asset;
+        return confirmRelease(environment, asset);
+      })
+      .then(answers => {
+        if (answers.confirmation) {
+          release(environment, asset);
+        } else {
+          console.log("Cancelling release...");
+        }
+      })
+      .catch(err => console.error(err));
+
+    /*
     // Get all the assets from all the buckets
     Promise.all(
       bucketNames.map(bucketName => getAssets(bucketName, bucketPath))
@@ -507,7 +609,7 @@ program
         confirmRelease(environment, asset)
       })
       .catch(err => console.error(err));
-
+      */
   });
 
 program.parse(process.argv);
