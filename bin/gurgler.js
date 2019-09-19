@@ -28,6 +28,7 @@ const localFilePaths = gurglerConfig["localFilePaths"];
 const slackWebHookUrl = gurglerConfig["slackWebHookUrl"];
 const slackUsername = gurglerConfig["slackUsername"];
 const slackIconEmoji = gurglerConfig["slackIconEmoji"];
+const githubRepoUrl = gurglerConfig["githubRepoUrl"];
 
 if (_.isEmpty(packageName)) {
   console.error("The package name is not set.");
@@ -83,6 +84,11 @@ if (_.isEmpty(slackUsername)) {
 
 if (_.isEmpty(slackIconEmoji)) {
   console.error("The config value slackIconEmoji is not set.");
+  process.exit(1);
+}
+
+if (_.isEmpty(githubRepoUrl)) {
+  console.error("The config value githubRepoUrl is not set.");
   process.exit(1);
 }
 
@@ -317,81 +323,6 @@ const requestCurrentlyReleasedVersions = (environments) => {
   });
 };
 
-const askQuestions = (environments, assets, parameters, environmentKey, commit) => {
-
-  const questions = [];
-  const prompts = new Rx.Subject();
-  let answers = {};
-
-  if (environmentKey) {
-    const environment = _.find(environments, e => e.key === environmentKey);
-    if (!environment) {
-      const keys = environments.map(e => e.key);
-      const keysStr = _.join(keys, ", ");
-      console.error(`"${environmentKey}" does not appear to be a valid environment. The choices are: ${keysStr}`);
-      process.exit(1);
-    }
-    answers.environment = environment;
-  }
-  else {
-    prompts.next(
-      {
-        type: 'list',
-        name: 'environment',
-        message: 'Which environment will receive this release?',
-        choices: environments.map(env => {
-          const checksum = currentlyReleasedSummary(parameters, env);
-          const label = _.padEnd(env.label, 12);
-          return {
-            name: `${label} ${checksum}`,
-            value: env.key
-          }
-        })
-      }
-    )
-  }
-
-  if (commit) {
-    if (commit.length < 7) {
-      console.error(`The checksum "${commit}" is not long enough, it should be at least 7 characters.`);
-      process.exit(1);
-    }
-
-    const asset = _.find(assets, asset => {
-      return _.startsWith(asset.gitSha, commit)
-    });
-
-    // TODO If we do not find it in this list of assets, check older assets too.
-
-    if (!asset) {
-      console.error(`"${commit}" does not appear to be a valid checksum.`);
-      process.exit(1);
-    }
-
-    answers.commit = commit;
-  }
-  else {
-    questions.push({
-      type: 'list',
-      name: 'commit',
-      message: 'Which deployed version would you like to release?',
-      choices: assets.map(asset => {
-        return { name: asset.displayName, value: asset.gitSha }
-      })
-    });
-  }
-
-  return inquirer.prompt(questions).then(questionAnswers => {
-    answers =  _.merge(answers, questionAnswers);
-
-    answers.asset = _.find(assets, (asset) => {
-      return asset.gitSha === answers.commit;
-    });
-
-    return answers;
-  });
-};
-
 const release = (environment, asset) => {
   /*
   const ssm = new AWS.SSM({
@@ -418,12 +349,12 @@ const release = (environment, asset) => {
 
 const sendReleaseMessage = (environment, asset) => {
   const userDoingDeploy = process.env.USER;
-  const simpleMessage = `${userDoingDeploy} successfully released elm asset ${packageName}[] to ${environment.key}`;
+  const simpleMessage = `${userDoingDeploy} successfully released elm asset ${packageName}[${asset.gitSha}] to ${environment.key}`;
 
   const slackMessage = [
     `*${userDoingDeploy}* successfully released a new ${packageName} asset to *${environment.key}*`,
-    `_${asset.displayName}`,
-    `<https://github.com/DripEmail/drip-elm/commit/${asset.gitSha}|View commit on GitHub>`,
+    `_${asset.displayName}_`,
+    `<${githubRepoUrl}/commit/${asset.gitSha}|View commit on GitHub>`,
   ].join("\n");
 
   const slackChannel = environment.slackChannel;
@@ -438,7 +369,7 @@ const sendReleaseMessage = (environment, asset) => {
         icon_emoji: slackIconEmoji,
         channel: slackChannel
       })
-    })();
+    })().catch(err => console.error(err));
   }
 
   console.log(simpleMessage);
