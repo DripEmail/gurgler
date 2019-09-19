@@ -324,7 +324,6 @@ const requestCurrentlyReleasedVersions = (environments) => {
 };
 
 const release = (environment, asset) => {
-  /*
   const ssm = new AWS.SSM({
     apiVersion: '2014-11-06'
   });
@@ -343,13 +342,11 @@ const release = (environment, asset) => {
     }
     sendReleaseMessage(environment, asset);
   });
-   */
-  sendReleaseMessage(environment, asset);
 };
 
 const sendReleaseMessage = (environment, asset) => {
   const userDoingDeploy = process.env.USER;
-  const simpleMessage = `${userDoingDeploy} successfully released elm asset ${packageName}[${asset.gitSha}] to ${environment.key}`;
+  const simpleMessage = `${userDoingDeploy} successfully released the asset ${packageName}[${asset.gitSha}] to ${environment.key}`;
 
   const slackMessage = [
     `*${userDoingDeploy}* successfully released a new ${packageName} asset to *${environment.key}*`,
@@ -374,8 +371,6 @@ const sendReleaseMessage = (environment, asset) => {
 
   console.log(simpleMessage);
 };
-
-
 
 /**
  * *****************
@@ -509,38 +504,6 @@ program
         }
       })
       .catch(err => console.error(err));
-
-    /*
-    // Get all the assets from all the buckets
-    Promise.all(
-      bucketNames.map(bucketName => getAssets(bucketName, bucketPath))
-    )
-      .then(assetsLists => {
-      // Merge all the assets from all the buckets into 1 array
-      return new Promise((resolve) => {
-        resolve(_.unionWith(...assetsLists, _.isEqual))
-      });
-      })
-      .then(assets => {
-        return formatAndLimitAssets(assets, 20); // Only show last 20 assets
-      })
-      .then(assets => {
-        return Promise.all(assets.map(asset => addGitSha(asset)));
-      })
-      .then(assets => {
-        return Promise.all(assets.map(asset => addGitInfo(asset)));
-      })
-      .then(assets => {
-        const ssmKeys = environments.map(env => env.ssmKey);
-        return currentParameters(ssmKeys, assets);
-      })
-      .then(({ assets, parameters }) => {
-        return askQuestions(environments, assets, parameters, cmdObj.environment, cmdObj.commit);
-      }).then(({environment, commit, asset}) => {
-        confirmRelease(environment, asset)
-      })
-      .catch(err => console.error(err));
-      */
   });
 
 program.parse(process.argv);
