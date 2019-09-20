@@ -104,6 +104,41 @@ AWS.config.update({
 
 const shortHash = hash => hash.substring(0, 7);
 
+
+const requestCurrentlyReleasedVersions = (environments) => {
+
+  const ssmKeys = environments.map(env => env.ssmKey);
+
+  const ssm = new AWS.SSM({
+    apiVersion: '2014-11-06'
+  });
+
+  const params = {
+    Names: ssmKeys
+  };
+
+  return new Promise((resolve, reject) => {
+    ssm.getParameters(params, (err, data) => {
+      if (err) {
+        return reject(err);
+      }
+
+      const environmentsWithReleaseData = environments.map(env => {
+        const value = _.find(data.Parameters, v => env.ssmKey === v.Name);
+
+        env.releasedChecksum = _.get(value, "Value", "Unreleased!");
+        env.releaseChecksumShort = env.releasedChecksum === "Unreleased!" ? "Unreleased!" : shortHash(env.releasedChecksum)
+        env.releaseDateStr = _.get(value, "LastModifiedDate");
+
+        return env;
+      });
+
+      return resolve(environmentsWithReleaseData);
+    });
+  });
+};
+
+
 /**
  * Send the asset up to S3.
  *
@@ -379,7 +414,7 @@ program
   });
 
 
-const determineEnvironment = (cmdObj) => {
+const determineEnvironment = (cmdObj, environments) => {
   if (_.isEmpty(cmdObj.environment)) {
     return inquirer.prompt([ {
       type: 'list',
@@ -425,7 +460,7 @@ const determineAssetToRelease = (cmdObj, enviornment) => {
       if( _.isEmpty(cmdObj.commit)) {
         return inquirer.prompt([ {
             type: 'list',
-            name: 'commit',
+            name: 'asset',
             message: 'Which deployed version would you like to release?',
             choices: assets.map(asset => {
                 return {name: asset.displayName, value: asset}
@@ -473,9 +508,13 @@ program
   .option("-c, --commit <gitSha>", "the git sha (commit) of the asset to deploy")
   .action((cmdObj) => {
 
+
     let environment;
     let asset;
-    determineEnvironment(cmdObj)
+    requestCurrentlyReleasedVersions(environments)
+      .then(environments => {
+        return determineEnvironment(cmdObj, environments)
+      })
       .then(answers => {
         environment = answers.environment;
         return determineAssetToRelease(cmdObj, environment)
