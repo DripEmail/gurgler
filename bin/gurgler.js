@@ -119,7 +119,7 @@ const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitBranch, gi
   const { name: fileName } = path.parse(localFilePath);
   const gitSha = `${gitCommitSha}|${gitBranch}`;
 
-  //TODO upload map file if it exists.
+  // TODO upload map file if it exists.
 
   // TODO send source maps to Honeybadger (but maybe just the ones we deploy)
 
@@ -132,7 +132,7 @@ const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitBranch, gi
     const checksum = hash.digest('hex');
     const remoteFilePath = path.join(bucketPath, `${fileName}.${checksum}.js`);
 
-    bucketNames.forEach(function (bucketName) {
+    _.forEach(bucketNames, (bucketName) => {
       const s3 = new AWS.S3({
         apiVersion: '2006-03-01',
         params: { Bucket: bucketName }
@@ -152,6 +152,13 @@ const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitBranch, gi
     });
   });
 };
+
+/**
+ * Get all the assets in a bucket with a particular prefix (which essentially acts like a file path).
+ * @param bucketName
+ * @param prefix
+ * @returns {Promise<[{object}]>}
+ */
 
 const getAssets = (bucketName, prefix) => {
   const s3 = new AWS.S3({
@@ -195,17 +202,13 @@ const getAssets = (bucketName, prefix) => {
   });
 };
 
-const currentlyReleasedSummary = (parameters, environment) => {
-
-  const currentlyReleasedChecksum = _.result(_.find(parameters, (parameter) => {
-    return parameter.Name === environment.ssmKey;
-  }), 'Value');
-
-  const currentlyReleasedStr = _.isEmpty(currentlyReleasedChecksum) ? "Unreleased!" : currentlyReleasedChecksum.substring(0, 7);
-
-  return ` | ${packageName}[${currentlyReleasedStr}]`;
-};
-
+/**
+ * Sort the list of assets so the latest are first then return a slice of the first so many.
+ *
+ * @param assets
+ * @param size
+ * @returns {[{object}]}
+ */
 const formatAndLimitAssets = (assets, size) => {
   const returnedAssets = [];
 
@@ -228,6 +231,12 @@ const formatAndLimitAssets = (assets, size) => {
   return returnedAssets;
 };
 
+/**
+ * Take an asset object and add git data to it.
+ *
+ * @param asset
+ * @returns {Promise<object>}
+ */
 const addGitSha = (asset) => {
   const s3 = new AWS.S3({
     apiVersion: '2006-03-01'
@@ -274,15 +283,15 @@ const addGitInfo = (asset) => {
           'en-US',
           { month: '2-digit', day: '2-digit', year: 'numeric' }
           );
-        const checksumShort = asset.checksum.substring(0, 7);
+        const checksumShort = shortHash(asset.checksum);
         asset.displayName += (` | ${packageName}[${checksumShort}]`);
         return asset;
       }
 
       const author = commit.author();
       const commitDateStr = commit.date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
-      const checksumShort = asset.checksum.substring(0, 7);
-      const gitShaShort = gitSha.substring(0, 7);
+      const checksumShort = shortHash(asset.checksum);
+      const gitShaShort = shortHash(gitSha);
       const gitBranch = _.isEmpty(asset.gitBranch) ? "" : _.truncate(asset.gitBranch, {length: 15});
       const gitMessage = _.truncate(commit.message(), {length: 30}).replace(/(\r\n|\n|\r)/gm, '');
       asset.displayName = `${commitDateStr} | ${packageName}[${checksumShort}] | ${author.name()} | git[${gitShaShort}] | [${gitBranch}] ${gitMessage}`;
@@ -290,39 +299,12 @@ const addGitInfo = (asset) => {
     });
 };
 
-const requestCurrentlyReleasedVersions = (environments) => {
-
-  const ssmKeys = environments.map(env => env.ssmKey);
-
-  const ssm = new AWS.SSM({
-    apiVersion: '2014-11-06'
-  });
-
-  const params = {
-    Names: ssmKeys
-  };
-
-  return new Promise((resolve, reject) => {
-    ssm.getParameters(params, (err, data) => {
-      if (err) {
-        return reject(err);
-      }
-
-      const environmentsWithReleaseData = environments.map(env => {
-        const value = _.find(data.Parameters, v => env.ssmKey === v.Name);
-
-        env.releasedChecksum = _.get(value, "Value", "Unreleased!");
-        env.releaseChecksumShort = env.releasedChecksum === "Unreleased!" ? "Unreleased!" : shortHash(env.releasedChecksum)
-        env.releaseDateStr = _.get(value, "LastModifiedDate");
-
-        return env;
-      });
-
-      return resolve(environmentsWithReleaseData);
-    });
-  });
-};
-
+/**
+ * Update the value for the chosen environment in SSM.
+ *
+ * @param {object} environment
+ * @param {object} asset
+ */
 const release = (environment, asset) => {
   const ssm = new AWS.SSM({
     apiVersion: '2014-11-06'
@@ -336,7 +318,7 @@ const release = (environment, asset) => {
     Type: 'String',
     Overwrite: true
   };
-  ssm.putParameter(ssmParams, (err, data) => {
+  ssm.putParameter(ssmParams, (err) => {
     if (err) {
       throw err;
     }
@@ -344,6 +326,12 @@ const release = (environment, asset) => {
   });
 };
 
+/**
+ * Sends a message when the Slack when a release happens.
+ *
+ * @param {object} environment The users chosen environment.
+ * @param {object} asset The users chosen asset.
+ */
 const sendReleaseMessage = (environment, asset) => {
   const userDoingDeploy = process.env.USER;
   const simpleMessage = `${userDoingDeploy} successfully released the asset ${packageName}[${asset.gitSha}] to ${environment.key}`;
