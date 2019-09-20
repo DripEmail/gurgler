@@ -421,7 +421,7 @@ const determineEnvironment = (cmdObj) => {
 };
 
 const determineAssetToRelease = (cmdObj, enviornment) => {
-  const bucketName = _.get(bucketNames, enviornment.serverEnviroment);
+  const bucketName = _.get(bucketNames, enviornment.serverEnvironment);
 
   return getAssets(bucketName, bucketPath)
     .then(assets => {
