@@ -104,6 +104,12 @@ AWS.config.update({
 
 const shortHash = hash => hash.substring(0, 7);
 
+/**
+ * Get the currently release values for all the environments.
+ *
+ * @param environments
+ * @returns {Promise<[{object}]>}
+ */
 
 const requestCurrentlyReleasedVersions = (environments) => {
 
@@ -244,6 +250,7 @@ const getAssets = (bucketName, prefix) => {
  * @param size
  * @returns {[{object}]}
  */
+
 const formatAndLimitAssets = (assets, size) => {
   const returnedAssets = [];
 
@@ -272,6 +279,7 @@ const formatAndLimitAssets = (assets, size) => {
  * @param asset
  * @returns {Promise<object>}
  */
+
 const addGitSha = (asset) => {
   const s3 = new AWS.S3({
     apiVersion: '2006-03-01'
@@ -340,6 +348,7 @@ const addGitInfo = (asset) => {
  * @param {object} environment
  * @param {object} asset
  */
+
 const release = (environment, asset) => {
   const ssm = new AWS.SSM({
     apiVersion: '2014-11-06'
@@ -367,6 +376,7 @@ const release = (environment, asset) => {
  * @param {object} environment The users chosen environment.
  * @param {object} asset The users chosen asset.
  */
+
 const sendReleaseMessage = (environment, asset) => {
   const userDoingDeploy = process.env.USER;
   const simpleMessage = `${userDoingDeploy} successfully released the asset ${packageName}[${asset.gitSha}] to ${environment.key}`;
