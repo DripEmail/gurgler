@@ -83,7 +83,7 @@ deploy <gitCommitSha> <gitBranch>  sends a new asset (at a particular commit on 
 
 ### Release
 
-Release looks at your list of environments and lets you choose one. Then it looks at the list of your previously deployed assets and lets you choose an asset to release. It does my changing the value in the SSM parameter store. Finally it posts a message to a Slack channel using a webhook.
+Release looks at your list of environments and lets you choose one. Then it looks at the list of your previously deployed assets and lets you choose an asset to release. It does this by changing the value in the SSM parameter store. Finally it posts a message to a Slack channel using a webhook.
 
 The `release` command will ask what environment and what deployed asset to use 
 
