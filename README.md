@@ -18,6 +18,10 @@ npm install gurgler --save-dev
 yarn add -d gurgler
 ```
 
+### Setup a Slack App
+
+How to do this is well [documented on Slack's site](https://api.slack.com/slack-apps). After you go through the the process the essential bit is the Slack Webhook url.
+
 ### Configuration
 
 Add a `gurgler` key to your `package.json`. It should look something like this:
@@ -79,7 +83,7 @@ deploy <gitCommitSha> <gitBranch>  sends a new asset (at a particular commit on 
 
 ### Release
 
-Release looks at your list of environments and lets you choose one. Then it looks at the list of your previously deployed assets and lets you choose an asset to release. It does my changing the value in the SSM parameter store.
+Release looks at your list of environments and lets you choose one. Then it looks at the list of your previously deployed assets and lets you choose an asset to release. It does my changing the value in the SSM parameter store. Finally it posts a message to a Slack channel using a webhook.
 
 The `release` command will ask what environment and what deployed asset to use 
 
