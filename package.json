@@ -1,6 +1,6 @@
 {
   "name": "gurgler",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A deployment tool.",
   "main": "index.js",
   "repository": "git@github.com:DripEmail/gurgler.git",
@@ -15,7 +15,7 @@
     "dotenv": "^8.1.0",
     "inquirer": "^7.0.0",
     "lodash": "^4.17.15",
-    "nodegit": "^0.25.1",
+    "nodegit": "^0.26.2",
     "request": "^2.88.0"
   },
   "bin": {
