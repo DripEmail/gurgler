@@ -162,12 +162,14 @@ const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitInfo) => {
 
   // TODO send source maps to Honeybadger (but maybe just the ones we deploy)
 
-  // The default content-type provided by s3 if none is specified.
+  // This is an explicit call out to the default content-type header value used by s3.
   let contentType = "application/octet-stream";
+  // TODO: Add additional content types for all filetypes to be uploaded. text/css is the
+  // only requirement to get the assets working.
   if (ext === ".css") {
     contentType = "text/css";
   }
-
+  
   fs.readFile(localFilePath, (err, data) => {
     if (err) {
       throw err;
@@ -189,7 +191,6 @@ const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitInfo) => {
         ContentType: contentType,
       },(err) => {
         if (err) {
-          console.log("this is the error message", err)
           throw err;
         }
         console.log(`Successfully deployed ${localFilePath} to S3 bucket ${bucketName} ${remoteFilePath}`);
@@ -417,7 +418,6 @@ const sendReleaseMessage = (environment, asset) => {
 
 program
   .command('configure <gitCommitSha> <gitBranch>')
-  .description('creates a gurgler.json config file from which the build and deploy process can pull the desired git commit hash and git branch')
   .action((gitCommitSha, gitBranch) => {
     const hash = crypto.createHash('sha256');
     const raw = `${gitCommitSha}|${gitBranch}`;
@@ -438,7 +438,7 @@ program
       if (err) {
         throw err
       }
-      console.log(`gurgler configuration completed successfully; see output at ${filepath}\n`);
+      console.log(`gurgler successfully configured; see ${filepath}\n`);
     })
   });
 
@@ -550,6 +550,7 @@ program
   .option("-e, --environment <environment>", "environment to deploy to")
   .option("-c, --commit <gitSha>", "the git sha (commit) of the asset to deploy")
   .action((cmdObj) => {
+
 
     let environment;
     let asset;
