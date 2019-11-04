@@ -155,23 +155,25 @@ const requestCurrentlyReleasedVersions = (environments) => {
  * @param {string} gitCommitSha
  */
 
-const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitBranch, gitCommitSha) => {
-  const hash = crypto.createHash('sha256');
-  const { name: fileName } = path.parse(localFilePath);
-  const gitSha = `${gitCommitSha}|${gitBranch}`;
-
+const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitInfo) => {
+  const { name: fileName, ext } = path.parse(localFilePath);
+  
   // TODO upload map file if it exists.
 
   // TODO send source maps to Honeybadger (but maybe just the ones we deploy)
+
+  // The default content-type provided by s3 if none is specified.
+  let contentType = "application/octet-stream";
+  if (ext === ".css") {
+    contentType = "text/css";
+  }
 
   fs.readFile(localFilePath, (err, data) => {
     if (err) {
       throw err;
     }
-
-    hash.update(data);
-    const checksum = hash.digest('hex');
-    const remoteFilePath = path.join(bucketPath, `${fileName}.${checksum}.js`);
+    
+    const remoteFilePath = path.join(bucketPath, fileName+ext);
 
     _.forEach(bucketNames, (bucketName) => {
       const s3 = new AWS.S3({
@@ -183,9 +185,11 @@ const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitBranch, gi
         Key: remoteFilePath,
         Body: data,
         ACL: 'public-read',
-        Metadata: { 'git-sha': gitSha },
+        Metadata: { 'git-sha': gitInfo },
+        ContentType: contentType,
       },(err) => {
         if (err) {
+          console.log("this is the error message", err)
           throw err;
         }
         console.log(`Successfully deployed ${localFilePath} to S3 bucket ${bucketName} ${remoteFilePath}`);
@@ -411,18 +415,47 @@ const sendReleaseMessage = (environment, asset) => {
  * *****************
  */
 
-
 program
-  .command('deploy <gitCommitSha> <gitBranch> ')
-  .description('sends a new asset (at a particular commit on a particular branch) to the S3 bucket')
+  .command('configure <gitCommitSha> <gitBranch>')
+  .description('creates a gurgler.json config file from which the build and deploy process can pull the desired git commit hash and git branch')
   .action((gitCommitSha, gitBranch) => {
-    localFilePaths.forEach(localFilePath => {
-      // TODO verify the parameters (gitCommitSha, gitBranch)
-      readFileAndDeploy( bucketNames, bucketPath, localFilePath, gitBranch, gitCommitSha );
-    });
+    const hash = crypto.createHash('sha256');
+    const raw = `${gitCommitSha}|${gitBranch}`;
+  
+    hash.update(raw);
+    const sha = hash.digest('hex');
+    const publicPath = `${bucketPath}/${sha}/`
 
+    const data = JSON.stringify({
+      raw,
+      sha,
+      publicPath,
+    }, null, 2);
+
+    const filepath = "gurgler.json"
+
+    fs.writeFile(filepath, data, err => {
+      if (err) {
+        throw err
+      }
+      console.log(`gurgler configuration completed successfully; see output at ${filepath}\n`);
+    })
   });
 
+program
+  .command('deploy')
+  .description('sends a new asset (at a particular commit on a particular branch) to the S3 bucket')
+  .action(() => {
+    fs.readFile("gurgler.json", (err, data) => {
+      if (err) {
+        throw err;
+      }
+      const { raw: gitInfo, publicPath } = JSON.parse(data)
+      localFilePaths.forEach(localFilePath => {
+        readFileAndDeploy( bucketNames, publicPath, localFilePath, gitInfo);
+      });
+    });
+  });
 
 const determineEnvironment = (cmdObj, environments) => {
   if (_.isEmpty(cmdObj.environment)) {
@@ -517,7 +550,6 @@ program
   .option("-e, --environment <environment>", "environment to deploy to")
   .option("-c, --commit <gitSha>", "the git sha (commit) of the asset to deploy")
   .action((cmdObj) => {
-
 
     let environment;
     let asset;

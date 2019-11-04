@@ -2,7 +2,7 @@
   "name": "gurgler",
   "version": "1.0.2",
   "description": "A deployment tool.",
-  "main": "index.js",
+  "main": "gurgler.js",
   "repository": "git@github.com:DripEmail/gurgler.git",
   "author": "Jachin Rupe <jachin.rupe@drip.com>",
   "license": "MIT",
