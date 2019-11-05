@@ -418,6 +418,7 @@ const sendReleaseMessage = (environment, asset) => {
 
 program
   .command('configure <gitCommitSha> <gitBranch>')
+  .description('configures a gurgler.json in the root of the project to be referenced by the build and deployment pipeline')
   .action((gitCommitSha, gitBranch) => {
     const hash = crypto.createHash('sha256');
     const raw = `${gitCommitSha}|${gitBranch}`;
