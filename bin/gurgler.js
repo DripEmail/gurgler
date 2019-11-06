@@ -226,10 +226,10 @@ const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitInfo) => {
     // We want the gurgler.json to live in the same hierarchical tier as the prefix to all other
     // objects under that prefix. This means the release process can pull down at once all common
     // prefixes and any metadata related to all objects under each unique prefix.
-    if (name === "gurgler.json") {
+    if (base === "gurgler.json") {
       remoteFilePath = `${bucketPath}.${base}`
     } else {
-      remoteFilePath = path.join(bucketPath, name+ext);
+      remoteFilePath = path.join(bucketPath, base);
     }
 
     _.forEach(bucketNames, (bucketName) => {
