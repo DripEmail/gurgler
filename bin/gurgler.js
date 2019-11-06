@@ -188,7 +188,7 @@ const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitInfo) => {
       // We want gurgler.json to live in the same hierarchical tier as each unique prefix (as a sibling)
       // to the checksum to which the gurgler.json pertains. The release command will thus avoid retrieving
       // all objects, instead retrieving a single gurgler.json for each branch/commit.
-      remoteFilePath = `${bucketPath}.${base}`
+      remoteFilePath = `${bucketPath}-${base}`
     } else {
       remoteFilePath = path.join(bucketPath, base);
     }
@@ -222,7 +222,7 @@ const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitInfo) => {
  * @returns {Promise<[{object}]>}
  */
 
-const getAssets = (bucketName, prefix) => {
+const getGurglers = (bucketName, prefix) => {
   const s3 = new AWS.S3({
     apiVersion: '2006-03-01'
   });
@@ -233,29 +233,32 @@ const getAssets = (bucketName, prefix) => {
     const listAllKeys = (token) => {
       const opts = {
         Bucket: bucketName,
-        Prefix: prefix,
+        // We want all gurgler.json keys, not any of the actual asset keys.
+        Delimiter: "/",
+        Prefix: prefix + "/",
       };
 
       if (token) {
         opts.ContinuationToken = token;
       }
-
+      
       s3.listObjectsV2(opts, (err, data) => {
         if (err) {
           reject()
         }
+
         allKeys = allKeys.concat(data.Contents);
 
         if (data.IsTruncated){
           listAllKeys(data.NextContinuationToken);
         }
         else {
-          resolve(allKeys.map(asset => {
+          resolve(allKeys.map(gurgler => {
             return {
-              filePath: asset.Key,
-              lastModified: asset.LastModified,
-              bucket: bucketName
-            };
+              filepath: gurgler.Key,
+              lastModified: gurgler.LastModified,
+              bucket: bucketName,
+            }
           }));
         }
       });
@@ -272,26 +275,27 @@ const getAssets = (bucketName, prefix) => {
  * @returns {[{object}]}
  */
 
-const formatAndLimitAssets = (assets, size) => {
-  const returnedAssets = [];
+const formatAndLimitGurglers = (gurglers, size) => {
+  const returnedGurglers = [];
 
   _.reverse(
     _.sortBy(
-      assets,
+      gurglers,
       ['lastModified']
     )
   )
-    .slice(0, size).forEach(asset => {
-    const filename = asset.filePath.split('/')[1];
+    .slice(0, size).forEach(gurgler => {
+
+    const { name: filename } = path.parse(gurgler.filepath);
 
     if (filename !== '' && filename !== undefined) {
-      asset.checksum = filename.split('.')[2];
-      asset.checksumDigest = asset.checksum.substr(0, 7);
-      returnedAssets.push(asset);
+      gurgler.checksum = filename.split('-')[0];
+      gurgler.checksumDigest = gurgler.checksum.substr(0, 7);
+      returnedGurglers.push(gurgler);
     }
   });
 
-  return returnedAssets;
+  return returnedGurglers;
 };
 
 /**
@@ -309,7 +313,7 @@ const addGitSha = (asset) => {
   return new Promise((resolve, reject) => {
     s3.headObject({
       Bucket: asset.bucket,
-      Key: asset.filePath
+      Key: asset.filepath
     }, (err, data) => {
       if (err) {
         return reject(err);
@@ -505,27 +509,27 @@ const determineEnvironment = (cmdObj, environments) => {
   }
 };
 
-const determineAssetToRelease = (cmdObj, enviornment) => {
+const determineGurglerToRelease = (cmdObj, enviornment) => {
   const bucketName = _.get(bucketNames, enviornment.serverEnvironment);
 
-  return getAssets(bucketName, bucketPath)
-    .then(assets => {
-      return formatAndLimitAssets(assets, 20); // Only show last 20 assets
+  return getGurglers(bucketName, bucketPath)
+    .then(gurglers => {
+      return formatAndLimitGurglers(gurglers, 20); // Only show last 20 gurglers
     })
-    .then(assets => {
-      return Promise.all(assets.map(asset => addGitSha(asset)));
+    .then(gurglers => {
+      return Promise.all(gurglers.map(gurgler => addGitSha(gurgler)));
     })
-    .then(assets => {
-      return Promise.all(assets.map(asset => addGitInfo(asset)));
+    .then(gurglers => {
+      return Promise.all(gurglers.map(gurgler => addGitInfo(gurgler)));
     })
-    .then(assets => {
+    .then(gurglers => {
       if( _.isEmpty(cmdObj.commit)) {
         return inquirer.prompt([ {
             type: 'list',
-            name: 'asset',
+            name: 'gurgler',
             message: 'Which deployed version would you like to release?',
-            choices: assets.map(asset => {
-                return {name: asset.displayName, value: asset}
+            choices: gurglers.map(gurgler => {
+                return {name: gurgler.displayName, value: gurgler}
               }
             )
         }])
@@ -537,28 +541,28 @@ const determineAssetToRelease = (cmdObj, enviornment) => {
             process.exit(1);
           }
 
-          const asset = _.find(assets, asset => {
-            return _.startsWith(asset.gitSha, cmdObj.commit)
+          const gurgler = _.find(gurglers, gurgler => {
+            return _.startsWith(gurgler.gitSha, cmdObj.commit)
           });
 
           // TODO If we do not find it in this list of assets, check older assets too.
 
-          if (!asset) {
+          if (!gurgler) {
             console.error(`"${cmdObj.commit}" does not appear to be a valid checksum.`);
             process.exit(1);
           }
 
-          resolve({asset: asset});
+          resolve({gurgler: gurgler});
         }));
       }
     })
 };
 
-const confirmRelease = (environment, asset) => {
+const confirmRelease = (environment, gurgler) => {
   return inquirer.prompt([{
     type: 'confirm',
     name: 'confirmation',
-    message: `Do you want to release ${packageName} git[${asset.gitShaDigest}] checksum[${asset.checksumDigest}] to ${environment.key}?`,
+    message: `Do you want to release ${packageName} git[${gurgler.gitShaDigest}] checksum[${gurgler.checksumDigest}] to ${environment.key}?`,
     default: false
   }]);
 };
@@ -571,22 +575,22 @@ program
   .action((cmdObj) => {
 
     let environment;
-    let asset;
+    let gurgler;
     requestCurrentlyReleasedVersions(environments)
       .then(environments => {
         return determineEnvironment(cmdObj, environments)
       })
       .then(answers => {
         environment = answers.environment;
-        return determineAssetToRelease(cmdObj, environment)
+        return determineGurglerToRelease(cmdObj, environment)
       })
       .then(answers => {
-        asset = answers.asset;
-        return confirmRelease(environment, asset);
+        gurgler = answers.gurgler;
+        return confirmRelease(environment, gurgler);
       })
       .then(answers => {
         if (answers.confirmation) {
-          release(environment, asset);
+          release(environment, gurgler);
         } else {
           console.log("Cancelling release...");
         }
