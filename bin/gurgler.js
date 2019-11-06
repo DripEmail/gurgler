@@ -509,8 +509,8 @@ const determineEnvironment = (cmdObj, environments) => {
   }
 };
 
-const determineGurglerToRelease = (cmdObj, enviornment) => {
-  const bucketName = _.get(bucketNames, enviornment.serverEnvironment);
+const determineGurglerToRelease = (cmdObj, environment) => {
+  const bucketName = _.get(bucketNames, environment.serverEnvironment);
   if (!bucketName) {
     console.error(`The server environment "${environment.serverEnvironment}" does not exist, the environment must match a bucketName key`)
     process.exit(1);
