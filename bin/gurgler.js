@@ -104,6 +104,20 @@ AWS.config.update({
 
 const shortHash = hash => hash.substring(0, 7);
 
+const getContentType = (ext) => {
+  // This default content type is that to which S3 defaults.
+  let contentType = "application/octet-stream";
+  // TODO: Add more content types
+  if  (ext === ".css") {
+    contentType = "text/css";
+  } else if (ext === ".json") {
+    contentType = "application/json"
+  } else if (ext === ".html") {
+    contentType = "text/html"
+  }
+  return contentType;
+}
+
 /**
  * Get the currently release values for all the environments.
  *
@@ -155,27 +169,68 @@ const requestCurrentlyReleasedVersions = (environments) => {
  * @param {string} gitCommitSha
  */
 
+const deployToBucket = (bucketName, bucketPath, localFilePaths, gitSha) => {
+  const s3 = new AWS.S3({
+    apiVersion: '2006-03-01',
+    params: { Bucket: bucketName }
+  })
+  localFilePaths.forEach(localFilePath => {
+    fs.readFile(localFilePath, (err, data) => {
+      if (err) {
+        throw err;
+      }
+      const { name, ext } = path.parse(localFilePath);
+      let remoteFilePath;
+      // We want the gurgler.json to live in the same hierarchical tier as the prefix to all other
+      // objects under that prefix. This means the release process can pull down at once all common
+      // prefixes and any metadata related to all objects under each unique prefix.
+      if (name === "gurgler.json") {
+        remoteFilePath = `${bucketPath}.${name}`
+      } else {
+        remoteFilePath = path.join(bucketPath, name+ext);
+      }
+
+      contentType = getContentType(ext);
+
+      s3.upload({
+        Key: remoteFilePath,
+        Body: data,
+        ACL: 'public-read',
+        Metadata: { 'git-sha': gitSha },
+        ContentType: contentType,
+      }, (err) => {
+        if (err) {
+          throw err;
+        }
+        console.log(`Successfully deployed ${localFilePath} to S3 bucket ${bucketName} ${remoteFilePath}`);
+      })
+    });
+  });
+}
+
 const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitInfo) => {
-  const { name: fileName, ext } = path.parse(localFilePath);
   
   // TODO upload map file if it exists.
 
   // TODO send source maps to Honeybadger (but maybe just the ones we deploy)
 
-  // This is an explicit call out to the default content-type header value used by s3.
-  let contentType = "application/octet-stream";
-  // TODO: Add additional content types for all filetypes to be uploaded. text/css is the
-  // only requirement to get the assets working.
-  if (ext === ".css") {
-    contentType = "text/css";
-  }
-  
   fs.readFile(localFilePath, (err, data) => {
     if (err) {
       throw err;
     }
     
-    const remoteFilePath = path.join(bucketPath, fileName+ext);
+    const { name, ext } = path.parse(localFilePath);
+    const contentType = getContentType(ext);
+
+    let remoteFilePath;
+    // We want the gurgler.json to live in the same hierarchical tier as the prefix to all other
+    // objects under that prefix. This means the release process can pull down at once all common
+    // prefixes and any metadata related to all objects under each unique prefix.
+    if (name === "gurgler.json") {
+      remoteFilePath = `${bucketPath}.${name}`
+    } else {
+      remoteFilePath = path.join(bucketPath, name+ext);
+    }
 
     _.forEach(bucketNames, (bucketName) => {
       const s3 = new AWS.S3({
@@ -447,11 +502,13 @@ program
   .command('deploy')
   .description('sends a new asset (at a particular commit on a particular branch) to the S3 bucket')
   .action(() => {
-    fs.readFile("gurgler.json", (err, data) => {
+    const gurglerPath = "gurgler.json";
+    fs.readFile(filepath, (err, data) => {
       if (err) {
         throw err;
       }
       const { raw: gitInfo, prefix } = JSON.parse(data)
+      localFilePaths.push(gurglerPath);
       localFilePaths.forEach(localFilePath => {
         readFileAndDeploy( bucketNames, prefix, localFilePath, gitInfo);
       });
