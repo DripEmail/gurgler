@@ -169,45 +169,6 @@ const requestCurrentlyReleasedVersions = (environments) => {
  * @param {string} gitCommitSha
  */
 
-const deployToBucket = (bucketName, bucketPath, localFilePaths, gitSha) => {
-  const s3 = new AWS.S3({
-    apiVersion: '2006-03-01',
-    params: { Bucket: bucketName }
-  })
-  localFilePaths.forEach(localFilePath => {
-    fs.readFile(localFilePath, (err, data) => {
-      if (err) {
-        throw err;
-      }
-      const { name, ext } = path.parse(localFilePath);
-      let remoteFilePath;
-      // We want the gurgler.json to live in the same hierarchical tier as the prefix to all other
-      // objects under that prefix. This means the release process can pull down at once all common
-      // prefixes and any metadata related to all objects under each unique prefix.
-      if (name === "gurgler.json") {
-        remoteFilePath = `${bucketPath}.${name}`
-      } else {
-        remoteFilePath = path.join(bucketPath, name+ext);
-      }
-
-      contentType = getContentType(ext);
-
-      s3.upload({
-        Key: remoteFilePath,
-        Body: data,
-        ACL: 'public-read',
-        Metadata: { 'git-sha': gitSha },
-        ContentType: contentType,
-      }, (err) => {
-        if (err) {
-          throw err;
-        }
-        console.log(`Successfully deployed ${localFilePath} to S3 bucket ${bucketName} ${remoteFilePath}`);
-      })
-    });
-  });
-}
-
 const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitInfo) => {
   
   // TODO upload map file if it exists.
@@ -219,14 +180,14 @@ const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitInfo) => {
       throw err;
     }
     
-    const { base, name, ext } = path.parse(localFilePath);
+    const { base, ext } = path.parse(localFilePath);
     const contentType = getContentType(ext);
 
     let remoteFilePath;
-    // We want the gurgler.json to live in the same hierarchical tier as the prefix to all other
-    // objects under that prefix. This means the release process can pull down at once all common
-    // prefixes and any metadata related to all objects under each unique prefix.
     if (base === "gurgler.json") {
+      // We want gurgler.json to live in the same hierarchical tier as each unique prefix (as a sibling)
+      // to the checksum to which the gurgler.json pertains. The release command will thus avoid retrieving
+      // all objects, instead retrieving a single gurgler.json for each branch/commit.
       remoteFilePath = `${bucketPath}.${base}`
     } else {
       remoteFilePath = path.join(bucketPath, base);
