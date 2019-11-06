@@ -425,12 +425,12 @@ program
   
     hash.update(raw);
     const sha = hash.digest('hex');
-    const publicPath = `${bucketPath}/${sha}/`
+    const prefix = bucketPath + "/" + sha
 
     const data = JSON.stringify({
       raw,
       sha,
-      publicPath,
+      prefix,
     }, null, 2);
 
     const filepath = "gurgler.json"
@@ -451,9 +451,9 @@ program
       if (err) {
         throw err;
       }
-      const { raw: gitInfo, publicPath } = JSON.parse(data)
+      const { raw: gitInfo, prefix } = JSON.parse(data)
       localFilePaths.forEach(localFilePath => {
-        readFileAndDeploy( bucketNames, publicPath, localFilePath, gitInfo);
+        readFileAndDeploy( bucketNames, prefix, localFilePath, gitInfo);
       });
     });
   });
@@ -551,7 +551,6 @@ program
   .option("-e, --environment <environment>", "environment to deploy to")
   .option("-c, --commit <gitSha>", "the git sha (commit) of the asset to deploy")
   .action((cmdObj) => {
-
 
     let environment;
     let asset;
