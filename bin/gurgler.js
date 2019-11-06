@@ -503,7 +503,7 @@ program
   .description('sends a new asset (at a particular commit on a particular branch) to the S3 bucket')
   .action(() => {
     const gurglerPath = "gurgler.json";
-    fs.readFile(filepath, (err, data) => {
+    fs.readFile(gurglerPath, (err, data) => {
       if (err) {
         throw err;
       }
