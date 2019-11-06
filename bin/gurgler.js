@@ -219,7 +219,7 @@ const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitInfo) => {
       throw err;
     }
     
-    const { name, ext } = path.parse(localFilePath);
+    const { base, name, ext } = path.parse(localFilePath);
     const contentType = getContentType(ext);
 
     let remoteFilePath;
@@ -227,7 +227,7 @@ const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitInfo) => {
     // objects under that prefix. This means the release process can pull down at once all common
     // prefixes and any metadata related to all objects under each unique prefix.
     if (name === "gurgler.json") {
-      remoteFilePath = `${bucketPath}.${name}`
+      remoteFilePath = `${bucketPath}.${base}`
     } else {
       remoteFilePath = path.join(bucketPath, name+ext);
     }
