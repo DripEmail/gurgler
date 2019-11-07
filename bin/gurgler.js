@@ -227,15 +227,15 @@ const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo) => {
  * @returns {Promise<[{object}]>}
  */
 
-const getGurglers = (bucketName, prefix) => {
+const getDeployedVersionList = (bucketName, prefix) => {
   const s3 = new AWS.S3({
     apiVersion: '2006-03-01'
   });
 
   return new Promise((resolve, reject) => {
-    let allKeys = [];
+    let allVersions = [];
 
-    const listAllKeys = (token) => {
+    const listAllVersions = (token) => {
       const opts = {
         Bucket: bucketName,
         // We want all gurgler.json keys, not any of the actual asset keys.
@@ -252,55 +252,55 @@ const getGurglers = (bucketName, prefix) => {
           reject()
         }
 
-        allKeys = allKeys.concat(data.Contents);
+        allVersions = allVersions.concat(data.Contents);
 
         if (data.IsTruncated){
-          listAllKeys(data.NextContinuationToken);
+          listAllVersions(data.NextContinuationToken);
         }
         else {
-          resolve(allKeys.map(gurgler => {
+          resolve(allVersions.map(version => {
             return {
-              filepath: gurgler.Key,
-              lastModified: gurgler.LastModified,
+              filepath: version.Key,
+              lastModified: version.LastModified,
               bucket: bucketName,
             }
           }));
         }
       });
     };
-    listAllKeys();
+    listAllVersions();
   });
 };
 
 /**
- * Sort the list of assets so the latest are first then return a slice of the first so many.
+ * Sort the list of versions so the latest are first then return a slice of the first so many.
  *
- * @param assets
+ * @param versions
  * @param size
  * @returns {[{object}]}
  */
 
-const formatAndLimitGurglers = (gurglers, size) => {
-  const returnedGurglers = [];
-
+const formatAndLimitDeployedVersions = (versions, size) => {
+  const returnedVersions = [];
+  
   _.reverse(
     _.sortBy(
-      gurglers,
+      versions,
       ['lastModified']
     )
   )
-    .slice(0, size).forEach(gurgler => {
+    .slice(0, size).forEach(version => {
 
-    const { name: filename } = path.parse(gurgler.filepath);
+    const { name: filename } = path.parse(version.filepath);
 
     if (filename !== '' && filename !== undefined) {
-      gurgler.checksum = filename.split('-')[0];
-      gurgler.checksumDigest = gurgler.checksum.substr(0, 7);
-      returnedGurglers.push(gurgler);
+      version.checksum = filename.split('-')[0];
+      version.checksumDigest = version.checksum.substr(0, 7);
+      returnedVersions.push(version);
     }
   });
 
-  return returnedGurglers;
+  return returnedVersions;
 };
 
 /**
@@ -518,24 +518,24 @@ const determineGurglerToRelease = (cmdObj, environment) => {
     process.exit(1);
   }
 
-  return getGurglers(bucketName, bucketPath)
-    .then(gurglers => {
-      return formatAndLimitGurglers(gurglers, 20); // Only show last 20 gurglers
+  return getDeployedVersionList(bucketName, bucketPath)
+    .then(versions => {
+      return formatAndLimitDeployedVersions(versions, 20); // Only show last 20 versions
     })
-    .then(gurglers => {
-      return Promise.all(gurglers.map(gurgler => addGitSha(gurgler)));
+    .then(versions => {
+      return Promise.all(versions.map(version => addGitSha(version)));
     })
-    .then(gurglers => {
-      return Promise.all(gurglers.map(gurgler => addGitInfo(gurgler)));
+    .then(versions => {
+      return Promise.all(versions.map(version => addGitInfo(version)));
     })
-    .then(gurglers => {
+    .then(versions => {
       if( _.isEmpty(cmdObj.commit)) {
         return inquirer.prompt([ {
             type: 'list',
-            name: 'gurgler',
+            name: 'version',
             message: 'Which deployed version would you like to release?',
-            choices: gurglers.map(gurgler => {
-                return {name: gurgler.displayName, value: gurgler}
+            choices: versions.map(version => {
+                return {name: version.displayName, value: version}
               }
             )
         }])
@@ -546,39 +546,39 @@ const determineGurglerToRelease = (cmdObj, environment) => {
             process.exit(1);
           }
 
-          const gurgler = _.find(gurglers, gurgler => {
-            return _.startsWith(gurgler.gitSha, cmdObj.commit)
+          const version = _.find(versions, version => {
+            return _.startsWith(version.gitSha, cmdObj.commit)
           });
 
           // TODO If we do not find it in this list of assets, check older assets too.
 
-          if (!gurgler) {
+          if (!version) {
             console.error(`"${cmdObj.commit}" does not appear to be a valid checksum.`);
             process.exit(1);
           }
 
-          resolve({gurgler: gurgler});
+          resolve({version: version});
         }));
       }
     })
 };
 
-const confirmRelease = (environment, gurgler) => {
+const confirmRelease = (environment, version) => {
   return inquirer.prompt([{
     type: 'confirm',
     name: 'confirmation',
-    message: `Do you want to release ${packageName} git[${gurgler.gitShaDigest}] checksum[${gurgler.checksumDigest}] to ${environment.key}?`,
+    message: `Do you want to release ${packageName} git[${version.gitShaDigest}] checksum[${version.checksumDigest}] to ${environment.key}?`,
     default: false
   }]).then(answers => {
     if (
       answers.confirmation && 
       environment.masterOnly && 
-      gurgler.gitBranch !== 'master'
+      version.gitBranch !== 'master'
     ) {
       return inquirer.prompt([{
         type: 'confirm',
         name: 'confirmation',
-        message: `Warning: You are attempting to release a non-master branch[${gurgler.gitBranch}] to a master-only environment[${environment.serverEnvironment}]. Do you wish to proceed?`,
+        message: `Warning: You are attempting to release a non-master branch[${version.gitBranch}] to a master-only environment[${environment.serverEnvironment}]. Do you wish to proceed?`,
       }])
     }
     return answers;
@@ -593,7 +593,7 @@ program
   .action((cmdObj) => {
 
     let environment;
-    let gurgler;
+    let version;
     requestCurrentlyReleasedVersions(environments)
       .then(environments => {
         return determineEnvironment(cmdObj, environments)
@@ -603,12 +603,12 @@ program
         return determineGurglerToRelease(cmdObj, environment)
       })
       .then(answers => {
-        gurgler = answers.gurgler;
-        return confirmRelease(environment, gurgler);
+        version = answers.version;
+        return confirmRelease(environment, version);
       })
       .then(answers => {
         if (answers.confirmation) {
-          release(environment, gurgler);
+          release(environment, version);
         } else {
           console.log("Cancelling release...");
         }
