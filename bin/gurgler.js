@@ -17,6 +17,7 @@ const { IncomingWebhook } = require('@slack/webhook');
  */
 
 // TODO There's got to be a better way to get the path for this.
+const gurglerPath = path.join(process.env.PWD, 'gurgler.json')
 const packageValues = require(path.join(process.env.PWD, 'package.json'));
 const packageName = packageValues['name'];
 const gurglerConfig = packageValues["gurgler"];
@@ -162,16 +163,18 @@ const requestCurrentlyReleasedVersions = (environments) => {
 
 
 /**
- * Send the asset up to S3.
+ * Send the file to S3. All files except gurgler.json are considered assets and will be prefixed with
+ * the appropriate value. If there are more than 1 hierarchies to the prefix, gurgler.json will maintain
+ * all prefixes save the last, to which it will be appended. For example, a prefix of assets/asdsf will
+ * result in all assets being stored within that prefix but gurgler.json will become assets/asdf.gurgler.json.
  *
  * @param {array} bucketNames
- * @param {string} bucketPath
+ * @param {string} prefix
  * @param {string} localFilePath
- * @param {string} gitBranch
- * @param {string} gitCommitSha
+ * @param {string} gitInfo
  */
 
-const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitInfo) => {
+const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo) => {
   
   // TODO upload map file if it exists.
 
@@ -190,9 +193,9 @@ const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitInfo) => {
       // We want gurgler.json to live in the same hierarchical tier as each unique prefix (as a sibling)
       // to the checksum to which the gurgler.json pertains. The release command will thus avoid retrieving
       // all objects, instead retrieving a single gurgler.json for each branch/commit.
-      remoteFilePath = `${bucketPath}-${base}`
+      remoteFilePath = `${prefix}.${base}`
     } else {
-      remoteFilePath = path.join(bucketPath, base);
+      remoteFilePath = path.join(prefix, base);
     }
 
     _.forEach(bucketNames, (bucketName) => {
@@ -205,7 +208,7 @@ const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitInfo) => {
         Key: remoteFilePath,
         Body: data,
         ACL: 'public-read',
-        Metadata: { 'git-sha': gitInfo },
+        Metadata: { 'git-info': gitInfo },
         ContentType: contentType,
       },(err) => {
         if (err) {
@@ -440,28 +443,26 @@ const sendReleaseMessage = (environment, asset) => {
 
 program
   .command('configure <gitCommitSha> <gitBranch>')
-  .description('configures a gurgler.json in the root of the project to be referenced by the build and deployment pipeline')
+  .description('configures a gurgler.json in the project root to be referenced in the build and deploy process')
   .action((gitCommitSha, gitBranch) => {
     const hash = crypto.createHash('sha256');
-    const raw = `${gitCommitSha}|${gitBranch}`;
-  
-    hash.update(raw);
-    const sha = hash.digest('hex');
-    const prefix = bucketPath + "/" + sha
-
+    const gitInfo = `${gitCommitSha}|${gitBranch}`;
+    
+    hash.update(gitInfo);
+    const checksum = hash.digest('hex');
+    const prefix = bucketPath + "/" + checksum
+    
     const data = JSON.stringify({
-      raw,
-      sha,
+      gitInfo,
+      checksum,
       prefix,
     }, null, 2);
 
-    const filepath = "gurgler.json"
-
-    fs.writeFile(filepath, data, err => {
+    fs.writeFile(gurglerPath, data, err => {
       if (err) {
         throw err
       }
-      console.log(`gurgler successfully configured; see ${filepath}\n`);
+      console.log(`gurgler successfully configured; the current build data can be found at ${gurglerPath}\n`);
     })
   });
 
@@ -469,15 +470,14 @@ program
   .command('deploy')
   .description('sends a new asset (at a particular commit on a particular branch) to the S3 bucket')
   .action(() => {
-    const gurglerPath = "gurgler.json";
     fs.readFile(gurglerPath, (err, data) => {
       if (err) {
         throw err;
       }
-      const { raw: gitInfo, prefix } = JSON.parse(data)
+      const { gitInfo, prefix } = JSON.parse(data)
       localFilePaths.push(gurglerPath);
       localFilePaths.forEach(localFilePath => {
-        readFileAndDeploy( bucketNames, prefix, localFilePath, gitInfo);
+        readFileAndDeploy(bucketNames, prefix, localFilePath, gitInfo);
       });
     });
   });
@@ -529,7 +529,7 @@ const determineGurglerToRelease = (cmdObj, environment) => {
       return Promise.all(gurglers.map(gurgler => addGitInfo(gurgler)));
     })
     .then(gurglers => {
-      if ( _.isEmpty(cmdObj.commit)) {
+      if( _.isEmpty(cmdObj.commit)) {
         return inquirer.prompt([ {
             type: 'list',
             name: 'gurgler',
