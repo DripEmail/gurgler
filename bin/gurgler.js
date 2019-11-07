@@ -529,7 +529,7 @@ const determineGurglerToRelease = (cmdObj, environment) => {
       return Promise.all(gurglers.map(gurgler => addGitInfo(gurgler)));
     })
     .then(gurglers => {
-      if( _.isEmpty(cmdObj.commit)) {
+      if ( _.isEmpty(cmdObj.commit)) {
         return inquirer.prompt([ {
             type: 'list',
             name: 'gurgler',
@@ -539,8 +539,7 @@ const determineGurglerToRelease = (cmdObj, environment) => {
               }
             )
         }])
-      }
-      else {
+      } else {
         return new Promise(((resolve) => {
           if (cmdObj.commit.length < 7) {
             console.error(`The checksum "${cmdObj.commit}" is not long enough, it should be at least 7 characters.`);
