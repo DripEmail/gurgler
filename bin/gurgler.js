@@ -304,21 +304,21 @@ const formatAndLimitDeployedVersions = (versions, size) => {
 };
 
 /**
- * Take an asset object and add git data to it.
+ * Take a version object and add git data to it.
  *
- * @param asset
+ * @param version
  * @returns {Promise<object>}
  */
 
-const addGitSha = (asset) => {
+const addGitSha = (version) => {
   const s3 = new AWS.S3({
     apiVersion: '2006-03-01'
   });
 
   return new Promise((resolve, reject) => {
     s3.headObject({
-      Bucket: asset.bucket,
-      Key: asset.filepath
+      Bucket: version.bucket,
+      Key: version.filepath
     }, (err, data) => {
       if (err) {
         return reject(err);
@@ -327,17 +327,17 @@ const addGitSha = (asset) => {
       const metaData = data.Metadata['git-sha'];
       if (metaData !== '' && metaData !== undefined) {
         const parsedMetaData = metaData.split('|');
-        asset.gitSha = parsedMetaData[0];
-        asset.gitShaDigest = parsedMetaData[0].substr(0, 7);
-        asset.gitBranch = parsedMetaData[1];
+        version.gitSha = parsedMetaData[0];
+        version.gitShaDigest = parsedMetaData[0].substr(0, 7);
+        version.gitBranch = parsedMetaData[1];
       }
-      return resolve(asset);
+      return resolve(version);
     });
   });
 };
 
-const addGitInfo = (asset) => {
-  const gitSha = asset.gitSha;
+const addGitInfo = (version) => {
+  const gitSha = version.gitSha;
 
   return NodeGit.Repository.open('.')
     .then(repo => {
@@ -352,23 +352,23 @@ const addGitInfo = (asset) => {
     })
     .then(commit => {
       if (commit === undefined) {
-        asset.displayName = asset.lastModified.toLocaleDateString(
+        version.displayName = version.lastModified.toLocaleDateString(
           'en-US',
           { month: '2-digit', day: '2-digit', year: 'numeric' }
           );
-        const checksumShort = shortHash(asset.checksum);
-        asset.displayName += (` | ${packageName}[${checksumShort}]`);
-        return asset;
+        const checksumShort = shortHash(version.checksum);
+        version.displayName += (` | ${packageName}[${checksumShort}]`);
+        return version;
       }
 
       const author = commit.author();
       const commitDateStr = commit.date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
-      const checksumShort = shortHash(asset.checksum);
+      const checksumShort = shortHash(version.checksum);
       const gitShaShort = shortHash(gitSha);
-      const gitBranch = _.isEmpty(asset.gitBranch) ? "" : _.truncate(asset.gitBranch, {length: 15});
+      const gitBranch = _.isEmpty(version.gitBranch) ? "" : _.truncate(version.gitBranch, {length: 15});
       const gitMessage = _.truncate(commit.message(), {length: 30}).replace(/(\r\n|\n|\r)/gm, '');
-      asset.displayName = `${commitDateStr} | ${packageName}[${checksumShort}] | ${author.name()} | git[${gitShaShort}] | [${gitBranch}] ${gitMessage}`;
-      return asset;
+      version.displayName = `${commitDateStr} | ${packageName}[${checksumShort}] | ${author.name()} | git[${gitShaShort}] | [${gitBranch}] ${gitMessage}`;
+      return version;
     });
 };
 
@@ -376,10 +376,10 @@ const addGitInfo = (asset) => {
  * Update the value for the chosen environment in SSM.
  *
  * @param {object} environment
- * @param {object} asset
+ * @param {object} version
  */
 
-const release = (environment, asset) => {
+const release = (environment, version) => {
   const ssm = new AWS.SSM({
     apiVersion: '2014-11-06'
   });
@@ -388,7 +388,7 @@ const release = (environment, asset) => {
 
   const ssmParams = {
     Name: ssmKey,
-    Value: asset.checksum,
+    Value: version.checksum,
     Type: 'String',
     Overwrite: true
   };
@@ -396,7 +396,7 @@ const release = (environment, asset) => {
     if (err) {
       throw err;
     }
-    sendReleaseMessage(environment, asset);
+    sendReleaseMessage(environment, version);
   });
 };
 
@@ -404,17 +404,17 @@ const release = (environment, asset) => {
  * Sends a message when the Slack when a release happens.
  *
  * @param {object} environment The users chosen environment.
- * @param {object} asset The users chosen asset.
+ * @param {object} version The users chosen version.
  */
 
-const sendReleaseMessage = (environment, asset) => {
+const sendReleaseMessage = (environment, version) => {
   const userDoingDeploy = process.env.USER;
-  const simpleMessage = `${userDoingDeploy} successfully released the asset ${packageName}[${asset.gitSha}] to ${environment.key}`;
+  const simpleMessage = `${userDoingDeploy} successfully released the version ${packageName}[${version.gitSha}] to ${environment.key}`;
 
   const slackMessage = [
-    `*${userDoingDeploy}* successfully released a new ${packageName} asset to *${environment.key}*`,
-    `_${asset.displayName}_`,
-    `<${githubRepoUrl}/commit/${asset.gitSha}|View commit on GitHub>`,
+    `*${userDoingDeploy}* successfully released a new ${packageName} version to *${environment.key}*`,
+    `_${version.displayName}_`,
+    `<${githubRepoUrl}/commit/${version.gitSha}|View commit on GitHub>`,
   ].join("\n");
 
   const slackChannel = environment.slackChannel;
@@ -468,7 +468,7 @@ program
 
 program
   .command('deploy')
-  .description('sends a new asset (at a particular commit on a particular branch) to the S3 bucket')
+  .description('sends a new version (at a particular commit on a particular branch) to the S3 bucket')
   .action(() => {
     fs.readFile(gurglerPath, (err, data) => {
       if (err) {
@@ -587,9 +587,9 @@ const confirmRelease = (environment, version) => {
 
 program
   .command('release')
-  .description('takes a previously deployed asset a turns it on for a particular environment')
+  .description('takes a previously deployed version and turns it on for a particular environment')
   .option("-e, --environment <environment>", "environment to deploy to")
-  .option("-c, --commit <gitSha>", "the git sha (commit) of the asset to deploy")
+  .option("-c, --commit <gitSha>", "the git sha (commit) of the version to deploy")
   .action((cmdObj) => {
 
     let environment;
