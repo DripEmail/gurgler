@@ -114,6 +114,8 @@ const getContentType = (ext) => {
     contentType = "application/json"
   } else if (ext === ".html") {
     contentType = "text/html"
+  } else if (ext ===  ".js") {
+    contentType = "application/javascript"
   }
   return contentType;
 }
