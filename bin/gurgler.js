@@ -31,6 +31,8 @@ const slackUsername = gurglerConfig["slackUsername"];
 const slackIconEmoji = gurglerConfig["slackIconEmoji"];
 const githubRepoUrl = gurglerConfig["githubRepoUrl"];
 
+let useSlackWebHook = false;
+
 if (_.isEmpty(packageName)) {
   console.error("The package name is not set.");
   process.exit(1);
@@ -73,24 +75,30 @@ localFilePaths.forEach(path => {
   }
 });
 
-if (_.isEmpty(slackWebHookUrl)) {
-  console.error("The config value slackWebHookUrl is not set.");
-  process.exit(1);
-}
+// Omit all slack-related keys from the package.json to disable slack.
+if (_.has(gurglerConfig, "slackWebHookUrl") || _.has(gurglerConfig, "slackUsername") || _.has(gurglerConfig, "slackIconEmoji")) {
 
-if (_.isEmpty(slackUsername)) {
-  console.error("The config value slackUsername is not set.");
-  process.exit(1);
-}
+  if (_.isEmpty(slackWebHookUrl)) {
+    console.error("The config value slackWebHookUrl is not set.");
+    process.exit(1);
+  }
+  
+  if (_.isEmpty(slackUsername)) {
+    console.error("The config value slackUsername is not set.");
+    process.exit(1);
+  }
+  
+  if (_.isEmpty(slackIconEmoji)) {
+    console.error("The config value slackIconEmoji is not set.");
+    process.exit(1);
+  }
 
-if (_.isEmpty(slackIconEmoji)) {
-  console.error("The config value slackIconEmoji is not set.");
-  process.exit(1);
-}
+  if (_.isEmpty(githubRepoUrl)) {
+    console.error("The config value githubRepoUrl is not set.");
+    process.exit(1);
+  }
 
-if (_.isEmpty(githubRepoUrl)) {
-  console.error("The config value githubRepoUrl is not set.");
-  process.exit(1);
+  useSlackWebHook = true;
 }
 
 AWS.config.update({
@@ -411,27 +419,29 @@ const sendReleaseMessage = (environment, version) => {
   const userDoingDeploy = process.env.USER;
   const simpleMessage = `${userDoingDeploy} successfully released the version ${packageName}[${version.gitSha}] to ${environment.key}`;
 
-  const slackMessage = [
-    `*${userDoingDeploy}* successfully released a new ${packageName} version to *${environment.key}*`,
-    `_${version.displayName}_`,
-    `<${githubRepoUrl}/commit/${version.gitSha}|View commit on GitHub>`,
-  ].join("\n");
-
-  const slackChannel = environment.slackChannel;
-
-  if (!_.isEmpty(slackWebHookUrl) && !_.isEmpty(slackChannel)) {
-    const webhook = new IncomingWebhook(slackWebHookUrl);
-
-    (async () => {
-      await webhook.send({
-        username: slackUsername,
-        text: slackMessage,
-        icon_emoji: slackIconEmoji,
-        channel: slackChannel
-      })
-    })().catch(err => console.error(err));
+  if (useSlackWebHook) {
+    const slackMessage = [
+      `*${userDoingDeploy}* successfully released a new ${packageName} version to *${environment.key}*`,
+      `_${version.displayName}_`,
+      `<${githubRepoUrl}/commit/${version.gitSha}|View commit on GitHub>`,
+    ].join("\n");
+  
+    const slackChannel = environment.slackChannel;
+  
+    if (!_.isEmpty(slackWebHookUrl) && !_.isEmpty(slackChannel)) {
+      const webhook = new IncomingWebhook(slackWebHookUrl);
+  
+      (async () => {
+        await webhook.send({
+          username: slackUsername,
+          text: slackMessage,
+          icon_emoji: slackIconEmoji,
+          channel: slackChannel
+        })
+      })().catch(err => console.error(err));
+    }
   }
-
+  
   console.log(simpleMessage);
 };
 
