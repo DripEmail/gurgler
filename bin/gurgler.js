@@ -568,8 +568,7 @@ const confirmRelease = (environment, gurgler) => {
   return inquirer.prompt([{
     type: 'confirm',
     name: 'confirmation',
-    message: `Do you want to release ${packageName} git[${gurgler.gitShaDigest}] 
-              checksum[${gurgler.checksumDigest}] to ${environment.key}?`,
+    message: `Do you want to release ${packageName} git[${gurgler.gitShaDigest}] checksum[${gurgler.checksumDigest}] to ${environment.key}?`,
     default: false
   }]).then(answers => {
     if (
@@ -580,9 +579,7 @@ const confirmRelease = (environment, gurgler) => {
       return inquirer.prompt([{
         type: 'confirm',
         name: 'confirmation',
-        message: `Warning: You are attempting to release a non-master branch[${gurgler.gitBranch}]
-                  to a master-only environment[${environment.serverEnvironment}]. Do you wish to 
-                  proceed?`,
+        message: `Warning: You are attempting to release a non-master branch[${gurgler.gitBranch}] to a master-only environment[${environment.serverEnvironment}]. Do you wish to proceed?`,
       }])
     }
     return answers;
