@@ -332,7 +332,7 @@ const addGitSha = (version) => {
         return reject(err);
       }
 
-      const metaData = data.Metadata['git-sha'];
+      const metaData = data.Metadata['git-info'];
       if (metaData !== '' && metaData !== undefined) {
         const parsedMetaData = metaData.split('|');
         version.gitSha = parsedMetaData[0];
