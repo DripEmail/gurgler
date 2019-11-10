@@ -8,6 +8,7 @@ const _ = require('lodash');
 const crypto = require('crypto');
 const NodeGit = require('nodegit');
 const { IncomingWebhook } = require('@slack/webhook');
+const glob = require("glob");
 
 
 /**
@@ -25,12 +26,13 @@ const environments = gurglerConfig["environments"];
 const bucketNames = gurglerConfig["bucketNames"];
 const bucketPath = gurglerConfig["bucketPath"];
 const bucketRegion = gurglerConfig["bucketRegion"];
-const localFilePaths = gurglerConfig["localFilePaths"];
+const globs = gurglerConfig["globs"];
 const slackWebHookUrl = gurglerConfig["slackWebHookUrl"];
 const slackUsername = gurglerConfig["slackUsername"];
 const slackIconEmoji = gurglerConfig["slackIconEmoji"];
 const githubRepoUrl = gurglerConfig["githubRepoUrl"];
 
+let localFilePaths = gurglerConfig["localFilePaths"];
 let useSlackWebHook = false;
 
 if (_.isEmpty(packageName)) {
@@ -53,13 +55,48 @@ if (_.isEmpty(bucketRegion)) {
   process.exit(1);
 }
 
-if (_.isEmpty(localFilePaths)) {
-  console.error("The config value localFilePaths is not set.");
+if (!_.isEmpty(globs) && !_.isArray(globs)) {
+  console.log("The config value globs is not an array");
   process.exit(1);
 }
 
-if (!_.isArray(localFilePaths)) {
+if (_.isEmpty(localFilePaths)) {
+  localFilePaths = [];
+} else if (!_.isArray(localFilePaths)) {
   console.error("The config value localFilePaths is not an array.");
+  process.exit(1);
+}
+
+globs.forEach(globb => {
+  const pattern = globb.pattern;
+  const ignore = globb.ignore;
+  
+  if (!_.isString(pattern)) {
+    console.log("One of the patterns in globs is not a string");
+    process.exit(1);
+  }
+  
+  if (_.isEmpty(pattern)) {
+    console.log(`One of the patterns in globs is empty`);
+    process.exit(1);
+  }
+
+  if (_.has(globb, "ignore") && !_.isArray(ignore)) {
+    console.error("One of the glob.ignore values is not an array");
+    process.exit(1);
+  }
+
+  if (!_.every(ignore, _.isString)) {
+    console.error("One of the glob.ignore index values is not a string");
+  }
+
+  localFilePaths = localFilePaths.concat(glob.sync(pattern, {
+    ignore: ignore,
+  }));
+})
+
+if (_.isEmpty(localFilePaths)) {
+  console.error("There are no filepaths listed to deploy. Use globs or localFilePaths keys to add filepaths.");
   process.exit(1);
 }
 
