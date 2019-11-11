@@ -210,6 +210,56 @@ const requestCurrentlyReleasedVersions = (environments) => {
 
 
 /**
+ * Send the asset up to S3. This is the deprecated version which deploys all files under the bucketPath
+ * prefix with their own checksum in the filename (e.g. some_file.asdfasdf.js).
+ *
+ * @param {array} bucketNames
+ * @param {string} bucketPath
+ * @param {string} localFilePath
+ * @param {string} gitBranch
+ * @param {string} gitCommitSha
+ */
+
+const readFileAndDeploy = (bucketNames, bucketPath, localFilePath, gitBranch, gitCommitSha) => {
+  const hash = crypto.createHash('sha256');
+  const { name: fileName } = path.parse(localFilePath);
+  const gitSha = `${gitCommitSha}|${gitBranch}`;
+
+  // TODO upload map file if it exists.
+
+  // TODO send source maps to Honeybadger (but maybe just the ones we deploy)
+
+  fs.readFile(localFilePath, (err, data) => {
+    if (err) {
+      throw err;
+    }
+
+    hash.update(data);
+    const checksum = hash.digest('hex');
+    const remoteFilePath = path.join(bucketPath, `${fileName}.${checksum}.js`);
+
+    _.forEach(bucketNames, (bucketName) => {
+      const s3 = new AWS.S3({
+        apiVersion: '2006-03-01',
+        params: { Bucket: bucketName }
+      });
+
+      s3.upload({
+        Key: remoteFilePath,
+        Body: data,
+        ACL: 'public-read',
+        Metadata: { 'git-sha': gitSha },
+      },(err) => {
+        if (err) {
+          throw err;
+        }
+        console.log(`Successfully deployed ${localFilePath} to S3 bucket ${bucketName} ${remoteFilePath}`);
+      });
+    });
+  });
+};
+
+/**
  * Send the file to S3. All files except gurgler.json are considered assets and will be prefixed with
  * the appropriate value. If there are more than 1 hierarchies to the prefix, gurgler.json will maintain
  * all prefixes save the last, to which it will be appended. For example, a prefix of assets/asdsf will
@@ -221,7 +271,7 @@ const requestCurrentlyReleasedVersions = (environments) => {
  * @param {string} gitInfo
  */
 
-const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo) => {
+const readFileAndDeployV2 = (bucketNames, prefix, localFilePath, gitInfo) => {
   
   // TODO upload map file if it exists.
 
@@ -237,9 +287,7 @@ const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo) => {
 
     let remoteFilePath;
     if (base === "gurgler.json") {
-      // We want gurgler.json to live in the same hierarchical tier as each unique prefix (as a sibling)
-      // to the checksum to which the gurgler.json pertains. The release command will thus avoid retrieving
-      // all objects, instead retrieving a single gurgler.json for each branch/commit.
+      // prefix.gurgler.json is a sibling to the prefix under which all the assets are keyed.
       remoteFilePath = `${prefix}.${base}`
     } else {
       remoteFilePath = path.join(prefix, base);
@@ -493,17 +541,19 @@ const sendReleaseMessage = (environment, version) => {
 program
   .command('configure <gitCommitSha> <gitBranch>')
   .description('configures a gurgler.json in the project root to be referenced in the build and deploy process')
-  .action((gitCommitSha, gitBranch) => {
+  .action((commit, branch) => {
     const hash = crypto.createHash('sha256');
-    const gitInfo = `${gitCommitSha}|${gitBranch}`;
+    const raw = `${commit}|${branch}`;
     
-    hash.update(gitInfo);
-    const checksum = hash.digest('hex');
-    const prefix = bucketPath + "/" + checksum
+    hash.update(raw);
+    const hashed = hash.digest('hex');
+    const prefix = bucketPath + "/" + hashed
     
     const data = JSON.stringify({
-      gitInfo,
-      checksum,
+      commit,
+      branch,
+      raw,
+      hash: hashed,
       prefix,
     }, null, 2);
 
@@ -526,11 +576,11 @@ program
         }
         throw err;
       }
-      const { gitInfo, prefix } = JSON.parse(data)
 
       if (!localFilePaths) {
         localFilePaths = []
       }
+      localFilePaths.push(gurglerPath);
       
       globs.forEach(globb => {
         localFilePaths = localFilePaths.concat(glob.sync(globb.pattern, {
@@ -538,9 +588,14 @@ program
         }))
       })
 
-      localFilePaths.push(gurglerPath);
+      const { commit, branch, raw, prefix } = JSON.parse(data)
+
       localFilePaths.forEach(localFilePath => {
-        readFileAndDeploy(bucketNames, prefix, localFilePath, gitInfo);
+
+        // TODO: This is the old deployment method and should be removed when safe.
+        readFileAndDeploy(bucketNames, bucketPath, localFilePath, commit, branch);
+
+        readFileAndDeployV2(bucketNames, prefix, localFilePath, raw);
       });
     });
   });
