@@ -32,6 +32,9 @@ const slackUsername = gurglerConfig["slackUsername"];
 const slackIconEmoji = gurglerConfig["slackIconEmoji"];
 const githubRepoUrl = gurglerConfig["githubRepoUrl"];
 
+console.log(globs);
+process.exit(1);
+
 let localFilePaths = gurglerConfig["localFilePaths"];
 let useSlackWebHook = false;
 
