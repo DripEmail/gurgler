@@ -32,9 +32,6 @@ const slackUsername = gurglerConfig["slackUsername"];
 const slackIconEmoji = gurglerConfig["slackIconEmoji"];
 const githubRepoUrl = gurglerConfig["githubRepoUrl"];
 
-console.log(globs);
-process.exit(1);
-
 let localFilePaths = gurglerConfig["localFilePaths"];
 let useSlackWebHook = false;
 
@@ -58,62 +55,64 @@ if (_.isEmpty(bucketRegion)) {
   process.exit(1);
 }
 
-if (!_.isEmpty(globs) && !_.isArray(globs)) {
-  console.log("The config value globs is not an array");
+if (_.isEmpty(globs) && _.isEmpty(localFilePaths)) {
+  console.log("The config values globs and localFilePaths are both empty. One or both must be present with at least one value between the two.")
   process.exit(1);
 }
 
-if (_.isEmpty(localFilePaths)) {
-  localFilePaths = [];
-} else if (!_.isArray(localFilePaths)) {
-  console.error("The config value localFilePaths is not an array.");
-  process.exit(1);
+if (!_.isEmpty(globs)) {
+
+  if (!_.isArray(globs)) {
+    console.log("The config value globs is not an array");
+    process.exit(1);
+  }
+
+  globs.forEach(globb => {
+
+    if (_.isEmpty(globb.pattern)) {
+      console.log("At least one glob pattern is not set.");
+      process.exit(1);
+    }
+
+    if (!_.isString(globb.pattern)) {
+      console.log("At least one glob pattern is not a string.");
+      process.exit(1);
+    }
+
+    if (_.has(globb, "ignore")) {
+
+      if (!_.isArray(globb.ignore)) {
+        console.log("At least one glob ignore is not an array.");
+        process.exit(1);
+      }
+
+      globb.ignore.forEach(ignore => {
+
+        if (!_.isString(ignore)) {
+          console.log("At least one glob ignore array value is not a string.");
+          process.exit(1);
+        }
+      })
+    }
+  });
 }
 
-globs.forEach(globb => {
-  const pattern = globb.pattern;
-  const ignore = globb.ignore;
-  
-  if (!_.isString(pattern)) {
-    console.log("One of the patterns in globs is not a string");
-    process.exit(1);
-  }
-  
-  if (_.isEmpty(pattern)) {
-    console.log(`One of the patterns in globs is empty`);
-    process.exit(1);
-  }
+if (!_.isEmpty(localFilePaths)) {
+  if (!_.isArray(localFilePaths)) {
 
-  if (_.has(globb, "ignore") && !_.isArray(ignore)) {
-    console.error("One of the glob.ignore values is not an array");
-    process.exit(1);
   }
-
-  if (!_.every(ignore, _.isString)) {
-    console.error("One of the glob.ignore index values is not a string");
-  }
-
-  localFilePaths = localFilePaths.concat(glob.sync(pattern, {
-    ignore: ignore,
-  }));
-})
-
-if (_.isEmpty(localFilePaths)) {
-  console.error("There are no filepaths listed to deploy. Use globs or localFilePaths keys to add filepaths.");
-  process.exit(1);
+  localFilePaths.forEach(filepath => {
+    if (!_.isString(filepath)) {
+      console.log("At least one localFilePath value is not a string.");
+      process.exit(1);
+    }
+    
+    if (_.isEmpty(filepath)) {
+      console.log("At least one localFilePath value is an empty string.");
+      process.exit(1);
+    }
+  });
 }
-
-localFilePaths.forEach(path => {
-  if (!_.isString(path)) {
-    console.error("One of the paths in localFilePaths is not a string.");
-    process.exit(1);
-  }
-
-  if (_.isEmpty(path)) {
-    console.error("One of the paths in localFilePaths is empty.");
-    process.exit(1);
-  }
-});
 
 // Omit all slack-related keys from the package.json to disable slack.
 if (_.has(gurglerConfig, "slackWebHookUrl") || _.has(gurglerConfig, "slackUsername") || _.has(gurglerConfig, "slackIconEmoji")) {
@@ -512,7 +511,7 @@ program
       if (err) {
         throw err
       }
-      console.log(`gurgler successfully configured; the current build data can be found at ${gurglerPath}\n`);
+      console.log(`gurgler successfully configured; the current build info can be found at ${gurglerPath}\n`);
     })
   });
 
@@ -522,9 +521,23 @@ program
   .action(() => {
     fs.readFile(gurglerPath, (err, data) => {
       if (err) {
+        if (err.code === 'ENOENT') {
+          console.log("Either gurgler.json has not been built or it has been removed. Run 'gurgler configure <git commit sha> <git branch>' and try again.");
+        }
         throw err;
       }
       const { gitInfo, prefix } = JSON.parse(data)
+
+      if (!localFilePaths) {
+        localFilePaths = []
+      }
+      
+      globs.forEach(globb => {
+        localFilePaths = localFilePaths.concat(glob.sync(pattern, {
+          ignore: globb.ignore
+        }))
+      })
+
       localFilePaths.push(gurglerPath);
       localFilePaths.forEach(localFilePath => {
         readFileAndDeploy(bucketNames, prefix, localFilePath, gitInfo);
