@@ -533,7 +533,7 @@ program
       }
       
       globs.forEach(globb => {
-        localFilePaths = localFilePaths.concat(glob.sync(pattern, {
+        localFilePaths = localFilePaths.concat(glob.sync(globb.pattern, {
           ignore: globb.ignore
         }))
       })
