@@ -51,65 +51,6 @@ if (_.isEmpty(bucketRegion)) {
   process.exit(1);
 }
 
-// if (_.isEmpty(globs) && _.isEmpty(localFilePaths)) {
-//   console.log("The config values globs and localFilePaths are both empty. One or both must be present with at least one value between the two.")
-//   process.exit(1);
-// }
-
-// if (!_.isEmpty(globs)) {
-
-//   if (!_.isArray(globs)) {
-//     console.log("The config value globs is not an array");
-//     process.exit(1);
-//   }
-
-//   globs.forEach(globb => {
-
-//     if (_.isEmpty(globb.pattern)) {
-//       console.log("At least one glob pattern is not set.");
-//       process.exit(1);
-//     }
-
-//     if (!_.isString(globb.pattern)) {
-//       console.log("At least one glob pattern is not a string.");
-//       process.exit(1);
-//     }
-
-//     if (_.has(globb, "ignore")) {
-
-//       if (!_.isArray(globb.ignore)) {
-//         console.log("At least one glob ignore is not an array.");
-//         process.exit(1);
-//       }
-
-//       globb.ignore.forEach(ignore => {
-
-//         if (!_.isString(ignore)) {
-//           console.log("At least one glob ignore array value is not a string.");
-//           process.exit(1);
-//         }
-//       })
-//     }
-//   });
-// }
-
-// if (!_.isEmpty(localFilePaths)) {
-//   if (!_.isArray(localFilePaths)) {
-
-//   }
-//   localFilePaths.forEach(filepath => {
-//     if (!_.isString(filepath)) {
-//       console.log("At least one localFilePath value is not a string.");
-//       process.exit(1);
-//     }
-    
-//     if (_.isEmpty(filepath)) {
-//       console.log("At least one localFilePath value is an empty string.");
-//       process.exit(1);
-//     }
-//   });
-// }
-
 // If at least one slack-related key is present in the gurgler config it is assumed Slack should be
 // used and all Slack config values are inspected. The omission of all slack-related keys rather
 // obviously indicates Slack is not intended to be used and we don"t need to inspect each key.

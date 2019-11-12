@@ -312,6 +312,10 @@ const determineVersionToRelease = (cmdObj, bucketNames, environment, bucketPath,
       return Promise.all(versions.map(version => addGitInfo(version, packageName)));
     })
     .then(versions => {
+      if (versions.length === 0) {
+        console.log("\n> There are no currently deployed versions. Run 'gurgler configure <gitCommitSha> <gitBranch>' and `gurgler deploy` and try again.\n");
+        process.exit(0);
+      }
       if( _.isEmpty(cmdObj.commit)) {
         return inquirer.prompt([ {
             type: 'list',
@@ -355,7 +359,7 @@ const determineVersionToRelease = (cmdObj, bucketNames, environment, bucketPath,
 
 const sendReleaseMessage = (environment, version, packageName, slackConfig) => {
   const userDoingDeploy = process.env.USER;
-  const simpleMessage = `${userDoingDeploy} successfully released the version ${packageName}[${version.gitSha}] to ${environment.key}`;
+  const simpleMessage = `\n> ${userDoingDeploy} successfully released the version ${packageName}[${version.gitSha}] to ${environment.key}\n`;
 
   if (slackConfig) {
     const slackMessage = [

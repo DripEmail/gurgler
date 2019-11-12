@@ -301,6 +301,10 @@ const determineAssetToRelease = (cmdObj, bucketNames, environment, bucketPath, p
       return Promise.all(assets.map(asset => addGitInfo(asset, packageName)));
     })
     .then(assets => {
+      if (assets.length === 0) {
+        console.log("\n> There are no currently deployed drip-web-components. Run 'gurgler deploy <gitCommitSha> <gitBranch>' and try again.\n");
+        process.exit(0);
+      }
       if( _.isEmpty(cmdObj.commit)) {
         return inquirer.prompt([ {
             type: 'list',
@@ -382,7 +386,7 @@ const release = (environment, asset, packageName, slackConfig) => {
 
 const sendReleaseMessage = (environment, asset, packageName, slackConfig) => {
   const userDoingDeploy = process.env.USER;
-  const simpleMessage = `${userDoingDeploy} successfully released the asset ${packageName}[${asset.gitSha}] to ${environment.key}`;
+  const simpleMessage = `\n> ${userDoingDeploy} successfully released the asset ${packageName}[${asset.gitSha}] to ${environment.key}\n`;
 
   if (slackConfig) {
     const slackMessage = [
