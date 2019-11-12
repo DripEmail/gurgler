@@ -1,8 +1,8 @@
 #! /usr/bin/env node
-const AWS = require('aws-sdk');
-const program = require('commander');
-const path = require('path');
-const _ = require('lodash');
+const AWS = require("aws-sdk");
+const program = require("commander");
+const path = require("path");
+const _ = require("lodash");
 
 const v1 = require("./v1");
 const v2 = require("./v2");
@@ -13,10 +13,10 @@ const v2 = require("./v2");
  * *******************
  */
 
-// TODO There's got to be a better way to get the path for this.
-const gurglerPath = path.join(process.env.PWD, 'gurgler.json')
-const packageValues = require(path.join(process.env.PWD, 'package.json'));
-const packageName = packageValues['name'];
+// TODO There"s got to be a better way to get the path for this.
+const gurglerPath = path.join(process.env.PWD, "gurgler.json")
+const packageValues = require(path.join(process.env.PWD, "package.json"));
+const packageName = packageValues["name"];
 const gurglerConfig = packageValues["gurgler"];
 const environments = gurglerConfig["environments"];
 const bucketNames = gurglerConfig["bucketNames"];
@@ -112,7 +112,7 @@ if (!_.isEmpty(localFilePaths)) {
 
 // If at least one slack-related key is present in the gurgler config it is assumed Slack should be
 // used and all Slack config values are inspected. The omission of all slack-related keys rather
-// obviously indicates Slack is not intended to be used and we don't need to inspect each key.
+// obviously indicates Slack is not intended to be used and we don"t need to inspect each key.
 if (_.has(gurglerConfig, "slackWebHookUrl") || _.has(gurglerConfig, "slackUsername") || _.has(gurglerConfig, "slackIconEmoji")) {
 
   if (_.isEmpty(slackWebHookUrl)) {
@@ -154,26 +154,51 @@ AWS.config.update({
  */
 
 program
-  .command('configure <gitCommitSha> <gitBranch>')
-  .description('configures a gurgler.json in the project root to be referenced in the build and deploy process')
+  .command("configure <gitCommitSha> <gitBranch>")
+  .description("configures a gurgler.json in the project root to be referenced in the build and deploy process")
   .action((commit, branch) => v2.configureCmd(gurglerPath, bucketPath, commit, branch));
 
 program
-  .command('deploy')
-  .description('sends a new version (at a particular commit on a particular branch) to the S3 bucket')
-  .action(() => {
-    v1.deployCmd(bucketNames, bucketPath, gurglerPath, globs, localFilePaths);
-    v2.deployCmd(bucketNames, gurglerPath, globs, localFilePaths);
+  .command("deploy")
+  .description("sends all assets to S3 (at a particular commit on a particular branch) appending the file's checksum to each filename")
+  .option("--v2", "sends all assets to S3 under a common versioned prefix (bucketPath + hash('commit|branch')) without appending the file's checksum to the filename")
+  .action((cmdObj) => {
+    cmdObj.v2 ? v2.deployCmd(
+      bucketNames, 
+      gurglerPath, 
+      globs, 
+      localFilePaths
+    ) : v1.deployCmd(
+      bucketNames, 
+      bucketPath, 
+      gurglerPath, 
+      globs, 
+      localFilePaths
+    );
   });
 
 program
-  .command('release')
-  .description('takes a previously deployed version and turns it on for a particular environment')
+  .command("release")
+  .description("takes a previously deployed version and turns it on for a particular environment")
   .option("-e, --environment <environment>", "environment to deploy to")
   .option("-c, --commit <gitSha>", "the git sha (commit) of the version to deploy")
+  .option("--v2", "release v2 assets")
   .action((cmdObj) => {
-    // TODO: v1.releaseCmd
-    v2.releaseCmd(cmdObj, bucketNames, environments, bucketPath, packageName, slackConfig);
+    cmdObj.v2 ? v2.releaseCmd(
+      cmdObj, 
+      bucketNames,
+      environments,
+      bucketPath,
+      packageName,
+      slackConfig
+    ) : v1.releaseCmd(
+      cmdObj,
+      bucketNames,
+      environments,
+      bucketPath,
+      packageName,
+      slackConfig
+    );
   });
 
 program.parse(process.argv);

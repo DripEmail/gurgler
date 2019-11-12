@@ -167,7 +167,7 @@ const getDeployedVersionList = (bucketName, bucketPath) => {
           reject()
         }
 
-        concatenated = allVersions.concat(data.Contents);
+        const concatenated = allVersions.concat(data.Contents);
 
         // This is not strictly necessary once v1 is removed. It does, however, provide some extra
         // assurance we're only ever getting the gurgler.json keys.
@@ -366,7 +366,7 @@ const sendReleaseMessage = (environment, version, packageName, slackConfig) => {
   
     const slackChannel = environment.slackChannel;
   
-    if (!_.isEmpty(slackWebHookUrl) && !_.isEmpty(slackChannel)) {
+    if (!_.isEmpty(slackConfig.slackWebHookUrl) && !_.isEmpty(slackChannel)) {
       const webhook = new IncomingWebhook(slackWebHookUrl);
   
       (async () => {
