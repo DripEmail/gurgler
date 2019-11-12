@@ -457,7 +457,7 @@ const configureCmd = (gurglerPath, bucketPath, commit, branch) => {
   })
 }
 
-const deployCmd = (bucketNames, gurglerPath, globs, localFilePaths) => {
+const deployCmd = (bucketNames, gurglerPath, globs) => {
   fs.readFile(gurglerPath, (err, data) => {
     if (err) {
       if (err.code === 'ENOENT') {
@@ -466,10 +466,7 @@ const deployCmd = (bucketNames, gurglerPath, globs, localFilePaths) => {
       throw err;
     }
 
-    if (!localFilePaths) {
-      localFilePaths = []
-    }
-    localFilePaths.push(gurglerPath);
+    let localFilePaths = [gurglerPath];
     
     globs.forEach(globb => {
       localFilePaths = localFilePaths.concat(glob.sync(globb.pattern, {

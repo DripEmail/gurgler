@@ -155,7 +155,53 @@ AWS.config.update({
 
 
 const validateGlobs = () => {
+  if (!_.has(gurglerConfig, "localFileGlobs")) {
+    console.error("The config value localFileGlobs is not set.");
+    process.exit(1);
+  }
+  if (!_.isArray(globs)) {
+    console.error("The config value localFileGlobs is not an array.");
+    process.exit(1);
+  }
+  if (_.isEmpty(globs)) {
+    console.error("The config value localFileGlobs is empty.");
+    process.exit(1);
+  }
 
+  globs.forEach(globb => {
+    if (!_.has(globb, "pattern")) {
+      console.error("At least one glob pattern is not set in the config value localFileGlobs.");
+      process.exit(1);
+    }
+    if (!_.isString(globb.pattern)) {
+      console.error("At least one glob pattern is not a string in the config value localFileGlobs.");
+      process.exit(1);
+    }
+    if (_.isEmpty(globb.pattern)) {
+      console.error("At least one glob pattern is empty in the config value localFileGlobs.");
+      process.exit(1);
+    }
+
+    if (!_.has(globb, "ignore")) {
+      return;
+    }
+
+    if (!_.isArray(globb.ignore)) {
+      console.error("At least one glob ignore value is not an array.");
+      process.exit(1);
+    }
+
+    globb.ignore.forEach(pattern => {
+      if (!_.isString(pattern)) {
+        console.error("At least one glob ignore pattern is not a string in the config value localFileGlobs.");
+        process.exit(1);
+      }
+      if (_.isEmpty(pattern)) {
+        console.error("At least one glob ignore pattern is empty in the config value localFileGlobs.");
+        process.exit(1);
+      }
+    });
+  })
 }
 
 const validateLocalFilePaths = () => {
@@ -202,20 +248,14 @@ program
   .description("sends all assets to S3 (at a particular commit on a particular branch) appending the file's checksum to each filename")
   .option("--v2", "sends all assets to S3 under a common versioned prefix (bucketPath + hash('commit|branch')) without appending the file's checksum to the filename")
   .action((gitCommitSha, gitBranch, cmdObj) => {
-    // cmdObj.v2 ? v2.deployCmd(
-    //   bucketNames, 
-    //   gurglerPath, 
-    //   globs, 
-    //   localFilePaths
-    // ) : v1.deployCmd(
-    //   bucketNames, 
-    //   bucketPath, 
-    //   gurglerPath, 
-    //   globs, 
-    //   localFilePaths
-    // );
+
     if (cmdObj.v2) {
-      
+      validateGlobs();
+      v2.deployCmd(
+        bucketNames,
+        gurglerPath,
+        globs,
+      )
     } else {
 
       if (!gitCommitSha) {
