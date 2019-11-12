@@ -191,7 +191,7 @@ const getAssets = (bucketName, bucketPath) => {
  */
 
 const formatAndLimitAssets = (assets, size) => {
-  const returnedAssets = [];
+  let returnedAssets = [];
 
   _.reverse(
     _.sortBy(
@@ -202,7 +202,13 @@ const formatAndLimitAssets = (assets, size) => {
     .slice(0, size).forEach(asset => {
     const filename = asset.filePath.split('/')[1];
 
-    if (filename !== '' && filename !== undefined) {
+    const { base } = path.parse(asset.filePath)
+    const split = base.split(".")
+
+    // This logic is slightly modified from the original v1 implementation. Since the original logic
+    // was built for drip-web-components.bundle.js we shouldn't be allowing any releases for assets
+    // other than this specific filename.
+    if (split[0] + "." + split[1] === "drip-web-components.bundle") {
       asset.checksum = filename.split('.')[2];
       asset.checksumDigest = asset.checksum.substr(0, 7);
       returnedAssets.push(asset);
@@ -299,7 +305,7 @@ const determineAssetToRelease = (cmdObj, bucketNames, environment, bucketPath, p
         return inquirer.prompt([ {
             type: 'list',
             name: 'asset',
-            message: 'Which deployed version would you like to release?',
+            message: 'Which deployed drip-web-components version would you like to release?',
             choices: assets.map(asset => {
                 return {name: asset.displayName, value: asset}
               }
@@ -404,31 +410,10 @@ const sendReleaseMessage = (environment, asset, packageName, slackConfig) => {
   console.log(simpleMessage);
 };
 
-const deployCmd = (bucketNames, bucketPath, gurglerPath, globs, localFilePaths) => {
-  fs.readFile(gurglerPath, (err, data) => {
-    if (err) {
-      if (err.code === 'ENOENT') {
-        console.log("Either gurgler.json has not been built or it has been removed. Run 'gurgler configure <git commit sha> <git branch>' and try again.");
-      }
-      throw err;
-    }
-
-    if (!localFilePaths) {
-      localFilePaths = []
-    }
-    localFilePaths.push(gurglerPath);
-    
-    globs.forEach(globb => {
-      localFilePaths = localFilePaths.concat(glob.sync(globb.pattern, {
-        ignore: globb.ignore
-      }))
-    })
-
-    const { commit, branch } = JSON.parse(data)
-
-    localFilePaths.forEach(localFilePath => {
-      readFileAndDeploy(bucketNames, bucketPath, localFilePath, commit, branch);
-    });
+const deployCmd = (bucketNames, bucketPath, localFilePaths, gitCommitSha, gitBranch) => {
+  localFilePaths.forEach(localFilePath => {
+    // TODO verify the parameters (gitCommitSha, gitBranch)
+    readFileAndDeploy( bucketNames, bucketPath, localFilePath, gitBranch, gitCommitSha );
   });
 }
 

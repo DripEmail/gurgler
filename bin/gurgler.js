@@ -51,64 +51,64 @@ if (_.isEmpty(bucketRegion)) {
   process.exit(1);
 }
 
-if (_.isEmpty(globs) && _.isEmpty(localFilePaths)) {
-  console.log("The config values globs and localFilePaths are both empty. One or both must be present with at least one value between the two.")
-  process.exit(1);
-}
+// if (_.isEmpty(globs) && _.isEmpty(localFilePaths)) {
+//   console.log("The config values globs and localFilePaths are both empty. One or both must be present with at least one value between the two.")
+//   process.exit(1);
+// }
 
-if (!_.isEmpty(globs)) {
+// if (!_.isEmpty(globs)) {
 
-  if (!_.isArray(globs)) {
-    console.log("The config value globs is not an array");
-    process.exit(1);
-  }
+//   if (!_.isArray(globs)) {
+//     console.log("The config value globs is not an array");
+//     process.exit(1);
+//   }
 
-  globs.forEach(globb => {
+//   globs.forEach(globb => {
 
-    if (_.isEmpty(globb.pattern)) {
-      console.log("At least one glob pattern is not set.");
-      process.exit(1);
-    }
+//     if (_.isEmpty(globb.pattern)) {
+//       console.log("At least one glob pattern is not set.");
+//       process.exit(1);
+//     }
 
-    if (!_.isString(globb.pattern)) {
-      console.log("At least one glob pattern is not a string.");
-      process.exit(1);
-    }
+//     if (!_.isString(globb.pattern)) {
+//       console.log("At least one glob pattern is not a string.");
+//       process.exit(1);
+//     }
 
-    if (_.has(globb, "ignore")) {
+//     if (_.has(globb, "ignore")) {
 
-      if (!_.isArray(globb.ignore)) {
-        console.log("At least one glob ignore is not an array.");
-        process.exit(1);
-      }
+//       if (!_.isArray(globb.ignore)) {
+//         console.log("At least one glob ignore is not an array.");
+//         process.exit(1);
+//       }
 
-      globb.ignore.forEach(ignore => {
+//       globb.ignore.forEach(ignore => {
 
-        if (!_.isString(ignore)) {
-          console.log("At least one glob ignore array value is not a string.");
-          process.exit(1);
-        }
-      })
-    }
-  });
-}
+//         if (!_.isString(ignore)) {
+//           console.log("At least one glob ignore array value is not a string.");
+//           process.exit(1);
+//         }
+//       })
+//     }
+//   });
+// }
 
-if (!_.isEmpty(localFilePaths)) {
-  if (!_.isArray(localFilePaths)) {
+// if (!_.isEmpty(localFilePaths)) {
+//   if (!_.isArray(localFilePaths)) {
 
-  }
-  localFilePaths.forEach(filepath => {
-    if (!_.isString(filepath)) {
-      console.log("At least one localFilePath value is not a string.");
-      process.exit(1);
-    }
+//   }
+//   localFilePaths.forEach(filepath => {
+//     if (!_.isString(filepath)) {
+//       console.log("At least one localFilePath value is not a string.");
+//       process.exit(1);
+//     }
     
-    if (_.isEmpty(filepath)) {
-      console.log("At least one localFilePath value is an empty string.");
-      process.exit(1);
-    }
-  });
-}
+//     if (_.isEmpty(filepath)) {
+//       console.log("At least one localFilePath value is an empty string.");
+//       process.exit(1);
+//     }
+//   });
+// }
 
 // If at least one slack-related key is present in the gurgler config it is assumed Slack should be
 // used and all Slack config values are inspected. The omission of all slack-related keys rather
@@ -153,28 +153,90 @@ AWS.config.update({
  * *****************
  */
 
+
+const validateGlobs = () => {
+
+}
+
+const validateLocalFilePaths = () => {
+  if (!_.has(gurglerConfig, "localFilePaths")) {
+    console.error("The config value localFilePaths is not set.");
+    process.exit(1);
+  } 
+  if (!_.isArray(localFilePaths)) {
+    console.error("The config value localFilePaths is not an array.");
+    process.exit(1);
+  }
+  if (_.isEmpty(localFilePaths)) {
+    console.error("The config value localFilePaths is empty.");
+    process.exit(1);
+  }
+
+  localFilePaths.forEach(path => {
+    if (!_.isString(path)) {
+      console.error("One of the paths in localFilePaths is not a string.");
+      process.exit(1);
+    }
+    if (_.isEmpty(path)) {
+      console.error("One of the paths in localFilePaths is empty.");
+      process.exit(1);
+    }
+  });
+}
+
 program
   .command("configure <gitCommitSha> <gitBranch>")
   .description("configures a gurgler.json in the project root to be referenced in the build and deploy process")
-  .action((commit, branch) => v2.configureCmd(gurglerPath, bucketPath, commit, branch));
+  .action((commit, branch) => {
+    validateGlobs();
+    v2.configureCmd(
+      gurglerPath,
+      bucketPath,
+      commit,
+      branch
+    );
+  });
 
 program
-  .command("deploy")
+  .command("deploy [gitCommitSha] [gitBranch]")
   .description("sends all assets to S3 (at a particular commit on a particular branch) appending the file's checksum to each filename")
   .option("--v2", "sends all assets to S3 under a common versioned prefix (bucketPath + hash('commit|branch')) without appending the file's checksum to the filename")
-  .action((cmdObj) => {
-    cmdObj.v2 ? v2.deployCmd(
-      bucketNames, 
-      gurglerPath, 
-      globs, 
-      localFilePaths
-    ) : v1.deployCmd(
-      bucketNames, 
-      bucketPath, 
-      gurglerPath, 
-      globs, 
-      localFilePaths
-    );
+  .action((gitCommitSha, gitBranch, cmdObj) => {
+    // cmdObj.v2 ? v2.deployCmd(
+    //   bucketNames, 
+    //   gurglerPath, 
+    //   globs, 
+    //   localFilePaths
+    // ) : v1.deployCmd(
+    //   bucketNames, 
+    //   bucketPath, 
+    //   gurglerPath, 
+    //   globs, 
+    //   localFilePaths
+    // );
+    if (cmdObj.v2) {
+      
+    } else {
+
+      if (!gitCommitSha) {
+        console.error("error: missing required argument 'gitCommitSha'");
+        process.exit(1);
+      }
+      if (!gitBranch) {
+        console.error("error: missing required argument 'gitBranch'");
+        process.exit(1);
+      }
+
+      validateLocalFilePaths();
+
+      v1.deployCmd(
+        bucketNames, 
+        bucketPath,
+        localFilePaths,
+        gitCommitSha,
+        gitBranch
+      );
+    }
   });
 
 program
