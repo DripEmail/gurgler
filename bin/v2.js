@@ -94,8 +94,8 @@ const requestCurrentlyReleasedVersions = (environments) => {
       const environmentsWithReleaseData = environments.map(env => {
         const value = _.find(data.Parameters, v => env.ssmKey === v.Name);
 
-        env.releasedChecksum = _.get(value, "Value", "Unreleased!");
-        env.releaseChecksumShort = env.releasedChecksum === "Unreleased!" ? "Unreleased!" : utils.shortHash(env.releasedChecksum)
+        env.releasedHash = _.get(value, "Value", "Unreleased!");
+        env.releaseHashShort = env.releasedHash === "Unreleased!" ? "Unreleased!" : utils.shortHash(env.releasedHash)
         env.releaseDateStr = _.get(value, "LastModifiedDate");
 
         return env;
@@ -115,7 +115,7 @@ const determineEnvironment = (cmdObj, environments) => {
       choices: environments.map(env => {
         const label = _.padEnd(env.label, 12);
         return {
-          name: `${label} ${env.releaseChecksumShort}`,
+          name: `${label} ${env.releaseHashShort}`,
           value: env
         }
       })
@@ -169,8 +169,7 @@ const getDeployedVersionList = (bucketName, bucketPath) => {
 
         const concatenated = allVersions.concat(data.Contents);
 
-        // This is not strictly necessary once v1 is removed. It does, however, provide some extra
-        // assurance we're only ever getting the gurgler.json keys.
+        // Make sure we're only ever pulling our gurgler.json manifest files.
         allVersions = _.filter(concatenated, version => {
           const {base, ext} = path.parse(version.Key);
           return (ext === ".json" && base.split(".")[1] === "gurgler");
@@ -213,11 +212,14 @@ const formatAndLimitDeployedVersions = (versions, size) => {
   )
     .slice(0, size).forEach(version => {
 
-    const { name: filename } = path.parse(version.filepath);
+    const { base, ext } = path.parse(version.filepath);
+    const split = base.split(".");
 
-    if (filename !== '' && filename !== undefined) {
-      version.checksum = filename.split('-')[0];
-      version.checksumDigest = version.checksum.substr(0, 7);
+    // This check is technically not necessary assuming getDeployedVersionList only returns versions
+    // matching this criteria.
+    if (ext === ".json" && split[1] === "gurgler") {
+      version.hash = split[0];
+      version.hashDigest = version.hash.substr(0, 7);
       returnedVersions.push(version);
     }
   });
@@ -278,18 +280,18 @@ const addGitInfo = (version, packageName) => {
           'en-US',
           { month: '2-digit', day: '2-digit', year: 'numeric' }
           );
-        const checksumShort = utils.shortHash(version.checksum);
-        version.displayName += (` | ${packageName}[${checksumShort}]`);
+        const hashShort = utils.shortHash(version.hash);
+        version.displayName += (` | ${packageName}[${hashShort}]`);
         return version;
       }
 
       const author = commit.author();
       const commitDateStr = commit.date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
-      const checksumShort = utils.shortHash(version.checksum);
+      const hashShort = utils.shortHash(version.hash);
       const gitShaShort = utils.shortHash(gitSha);
       const gitBranch = _.isEmpty(version.gitBranch) ? "" : _.truncate(version.gitBranch, {length: 15});
       const gitMessage = _.truncate(commit.message(), {length: 30}).replace(/(\r\n|\n|\r)/gm, '');
-      version.displayName = `${commitDateStr} | ${packageName}[${checksumShort}] | ${author.name()} | git[${gitShaShort}] | [${gitBranch}] ${gitMessage}`;
+      version.displayName = `${commitDateStr} | ${packageName}[${hashShort}] | ${author.name()} | git[${gitShaShort}] | [${gitBranch}] ${gitMessage}`;
       return version;
     });
 };
@@ -403,7 +405,7 @@ const release = (environment, version, packageName, slackConfig) => {
 
   const ssmParams = {
     Name: ssmKey,
-    Value: version.checksum,
+    Value: version.hash,
     Type: 'String',
     Overwrite: true
   };
@@ -419,7 +421,7 @@ const confirmRelease = (environment, version, packageName) => {
   return inquirer.prompt([{
     type: 'confirm',
     name: 'confirmation',
-    message: `Do you want to release ${packageName} git[${version.gitShaDigest}] checksum[${version.checksumDigest}] to ${environment.key}?`,
+    message: `Do you want to release ${packageName} git[${version.gitShaDigest}] hash[${version.hashDigest}] to ${environment.key}?`,
     default: false
   }]).then(answers => {
     if (
