@@ -107,6 +107,9 @@ const requestCurrentlyReleasedVersions = (environments) => {
 };
 
 const determineEnvironment = (cmdObj, environments) => {
+  _.remove(environments, env => {
+    return (!(_.has(env, "v2") && env.v2))
+  });
   if (_.isEmpty(cmdObj.environment)) {
     return inquirer.prompt([ {
       type: 'list',
