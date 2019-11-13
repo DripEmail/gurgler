@@ -351,7 +351,20 @@ const confirmRelease = (environment, asset, packageName) => {
     name: 'confirmation',
     message: `Do you want to release ${packageName} git[${asset.gitShaDigest}] checksum[${asset.checksumDigest}] to ${environment.key}?`,
     default: false
-  }]);
+  }]).then(answers => {
+    if (
+      answers.confirmation && 
+      environment.masterOnly && 
+      asset.gitBranch !== 'master'
+    ) {
+      return inquirer.prompt([{
+        type: 'confirm',
+        name: 'confirmation',
+        message: `Warning: You are attempting to release a non-master branch[${asset.gitBranch}] to a master-only environment[${environment.serverEnvironment}]. Do you wish to proceed?`,
+      }])
+    }
+    return answers;
+  })
 };
 
 /**
