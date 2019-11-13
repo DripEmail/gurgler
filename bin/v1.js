@@ -99,6 +99,10 @@ const determineEnvironment = (cmdObj, environments) => {
     _.remove(environments, env => {
       return (_.has(env, "v2") && env.v2)
     });
+    if (environments.length === 0) {
+      console.log("> There are no configured v1 environments.\n");
+      process.exit(0);
+    }
     return inquirer.prompt([ {
       type: 'list',
       name: 'environment',
@@ -416,8 +420,8 @@ const sendReleaseMessage = (environment, asset, packageName, slackConfig) => {
 };
 
 const deployCmd = (bucketNames, bucketPath, localFilePaths, gitCommitSha, gitBranch) => {
+  
   localFilePaths.forEach(localFilePath => {
-    // TODO verify the parameters (gitCommitSha, gitBranch)
     readFileAndDeploy( bucketNames, bucketPath, localFilePath, gitBranch, gitCommitSha );
   });
 }
