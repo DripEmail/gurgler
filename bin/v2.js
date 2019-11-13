@@ -109,6 +109,10 @@ const determineEnvironment = (cmdObj, environments) => {
   _.remove(environments, env => {
     return (!(_.has(env, "v2") && env.v2))
   });
+  if (environments.length === 0) {
+    console.log("> There are no configured v2 environments.\n");
+    process.exit(0);
+  }
   if (_.isEmpty(cmdObj.environment)) {
     return inquirer.prompt([ {
       type: 'list',
@@ -491,7 +495,6 @@ const deployCmd = (bucketNames, gurglerPath, globs) => {
 }
 
 const releaseCmd = (cmdObj, bucketNames, environments, bucketPath, packageName, slackConfig) => {
-
   let environment;
   let version;
 
