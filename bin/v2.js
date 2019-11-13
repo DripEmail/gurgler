@@ -1,7 +1,6 @@
 const fs = require('fs');
 const AWS = require('aws-sdk');
 const inquirer = require('inquirer');
-const program = require('commander');
 const path = require('path');
 const _ = require('lodash');
 const crypto = require('crypto');

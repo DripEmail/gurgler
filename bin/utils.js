@@ -1,7 +1,6 @@
 const shortHash = hash => hash.substring(0, 7);
 
 const getContentType = (ext) => {
-  // This default content type is that to which S3 defaults.
   let contentType = "application/octet-stream";
   // TODO: Add more content types
   if  (ext === ".css") {
