@@ -135,7 +135,7 @@ Version 2 also introduces a few new configuration changes and overall deployment
 ],
 ```
 
-* Version to introduces a new CLI command `configure`. Use it to build a `gurgler.json` in the project root. Webpack can use this file as shown in the following example to know how to build internal references to other files in the build directory.
+* Version 2 introduces a new CLI command `configure`. Use it to build a `gurgler.json` in the project root. Webpack can use this file as shown in the following example to know how to build internal references to other files in the build directory.
 
 ```
 gurgler configure asdfasdfasdf some_branch
@@ -163,6 +163,42 @@ To release, simply add the `v2` flag:
 
 ```
 gurgler release --v2
+```
+
+You must run `configure` prior to every build in order to ensure your deploys are versioned under the correct commit and branch. You can easily set up a script to do so.
+
+```javascript
+const { execSync } = require("child_process");
+
+const gitCommitSha = process.argv[2];
+const gitBranch = process.argv[3];
+
+if (!gitCommitSha) {
+  throw new Error("The git commit sha is not set");
+}
+if (!gitBranch) {
+  throw new Error("The git branch is not set");
+}
+
+execSync(`yarn configure ${gitCommitSha} ${gitBranch}`, {
+  stdio: [0, 1, 2]
+});
+
+execSync(`yarn build`, { stdio: [0, 1, 2] });
+```
+
+This example assumes your package.json is set up with the following scripts:
+
+*scripts/build.js is the script shown above.*
+
+```json
+scripts {
+  "configure": "gurgler configure",
+  "build": "webpack --config webpack.config.js",
+  "configure-and-build": "node scripts/build.js",
+  "deploy": "gurgler deploy --v2",
+  "release": "gurgler release --v2",
+}
 ```
 
 ## Tips
