@@ -100,6 +100,71 @@ Options:
   -h, --help                       output usage information
 ```
 
+### Version 2
+
+There currently exist two deployment options while we phase into complete use of version 2. A version 1 deployment appends a file's checksum to the filename itself, allowing releases of individual files. Version 2 deploys all assets under a single common S3 bucket prefix which is the hash of both the git commit and branch to which those assets pertain.
+
+Version 2 also introduces a few new configuration changes and overall deployment workflow:
+
+* You now have the ability to set an environment to master-only, meaning you'll get a warning and additional confirmation prompt if you attempt to deploy non-master branch assets.
+
+```json
+{
+  "key": "production",
+  "ssmKey": "/production/asset-checksum",
+  "serverEnvironment": "production",
+  "label": "Production",
+  "slackChannel": "#deployments",
+  "masterOnly": true,
+  "v2": true
+}
+```
+
+* You must also (temporarily) add the `v2` key to any environment with which you wish to use version 2. This requirement will be removed once a full cutover to version 2 is made.
+
+* You can (and must) use file globs to describe which directories and/or files you'd like gurgler to deploy.
+
+```json
+"localFileGlobs": [
+  {
+    "pattern": "build/*",
+    "ignore": [
+      "*/garbage_file.json"
+    ]
+  }
+],
+```
+
+* Version to introduces a new CLI command `configure`. Use it to build a `gurgler.json` in the project root. Webpack can use this file as shown in the following example to know how to build internal references to other files in the build directory.
+
+```
+gurgler configure asdfasdfasdf some_branch
+```
+
+Use `gurgler.publicPath` in your webpack config to know what the public path will be once deployed to S3.
+
+```javascript
+const gurgler = require("gurgler")
+
+...
+
+{
+  loader: "file-loader",
+    options: {
+      name: "[name].[ext]"
+      publicPath: gurgler.publicPath()
+    }
+}
+```
+
+Now you can build your assets and subsequently deploy the with `gurgler deploy --v2`. Note that unlike version 1, no arguments are provided to `deploy`.
+
+To release, simply add the `v2` flag:
+
+```
+gurgler release --v2
+```
+
 ## Tips
 
 You could use your "continuous integration" system to run the "deploy" command after a successful build.
