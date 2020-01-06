@@ -403,21 +403,28 @@ const sendReleaseMessage = (environment, version, packageName, slackConfig) => {
  */
 
 const release = (environment, version, packageName, slackConfig) => {
-  const ssm = new AWS.SSM({
-    apiVersion: '2014-11-06'
+  const lambda = new AWS.Lambda({
+    apiVersion: '2015-03-31'
   });
 
-  const ssmKey = environment.ssmKey;
+  const params = {
+    FunctionName: "drip-production-gurgler",
+    InvocationType: "RequestResponse",
+    Payload: JSON.stringify({
+      parameterName: ssmKey,
+      parameterValue: version.hash,
+    })
+  }
 
-  const ssmParams = {
-    Name: ssmKey,
-    Value: version.hash,
-    Type: 'String',
-    Overwrite: true
-  };
-  ssm.putParameter(ssmParams, (err) => {
+  lambda.invoke(params, (err, data) => {
     if (err) {
       throw err;
+    }
+    if (data.StatusCode !== 200) {
+      throw new Error(`unsuccessful lambda invocation; unable to release asset version; got status ${data.StatusCode}`);
+    }
+    if (data.FunctionError) {
+      throw new Error(`one or more parameter store values could not be updated: ${data.Payload}`);
     }
     sendReleaseMessage(environment, version, packageName, slackConfig);
   });
