@@ -411,7 +411,7 @@ const release = (environment, version, packageName, slackConfig) => {
     FunctionName: "drip-production-gurgler",
     InvocationType: "RequestResponse",
     Payload: JSON.stringify({
-      parameterName: ssmKey,
+      parameterName: environment.ssmKey,
       parameterValue: version.hash,
     })
   }
