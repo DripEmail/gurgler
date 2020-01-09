@@ -102,7 +102,7 @@ Options:
 
 ### Version 2
 
-There currently exist two deployment options while we phase into complete use of version 2. A version 1 deployment appends a file's checksum to the filename itself, allowing releases of individual files. Version 2 deploys all assets under a single common S3 bucket prefix which is the hash of both the git commit and branch to which those assets pertain.
+There currently exist two deployment options while we phase into complete use of version 2. A version 1 deployment appends a file's checksum to the filename itself, allowing releases of individual files. Version 2 deploys all assets under a single common S3 bucket prefix which is the hash of both the git commit and branch to which those assets pertain. As of version 2.1, releases made under the v2 workflow (as described below) are made possible via a cross-account lambda and not direct access to parameter store.
 
 Version 2 also introduces a few new configuration changes and overall deployment workflow:
 
