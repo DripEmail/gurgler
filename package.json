@@ -1,6 +1,6 @@
 {
   "name": "gurgler",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "A deployment tool.",
   "main": "gurgler.js",
   "repository": "git@github.com:DripEmail/gurgler.git",
