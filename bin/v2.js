@@ -379,7 +379,7 @@ const sendReleaseMessage = (environment, version, packageName, slackConfig) => {
     const slackChannel = environment.slackChannel;
   
     if (!_.isEmpty(slackConfig.slackWebHookUrl) && !_.isEmpty(slackChannel)) {
-      const webhook = new IncomingWebhook(slackWebHookUrl);
+      const webhook = new IncomingWebhook(slackConfig.slackWebHookUrl);
   
       (async () => {
         await webhook.send({
