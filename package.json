@@ -1,6 +1,6 @@
 {
   "name": "gurgler",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "A deployment tool.",
   "main": "gurgler.js",
   "repository": "git@github.com:DripEmail/gurgler.git",
@@ -8,15 +8,15 @@
   "license": "MIT",
   "private": false,
   "dependencies": {
-    "@slack/webhook": "^5.0.1",
-    "aws-sdk": "^2.525.0",
-    "commander": "^3.0.1",
-    "crypto-js": "^3.1.9-1",
+    "@slack/webhook": "^5.0.2",
+    "aws-sdk": "^2.750.0",
+    "commander": "^6.1.0",
+    "crypto-js": "^4.0.0",
     "dotenv": "^8.1.0",
-    "inquirer": "^7.0.0",
-    "lodash": "^4.17.15",
-    "nodegit": "^0.26.2",
-    "request": "^2.88.0"
+    "inquirer": "^7.3.3",
+    "lodash": "^4.17.20",
+    "nodegit": "^0.27.0",
+    "request": "^2.88.2"
   },
   "bin": {
     "gurgler": "./bin/gurgler.js"
