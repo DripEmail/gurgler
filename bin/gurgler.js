@@ -20,6 +20,7 @@ const packageName = packageValues["name"];
 const gurglerConfig = packageValues["gurgler"];
 const environments = gurglerConfig["environments"];
 const bucketNames = gurglerConfig["bucketNames"];
+const lambdaFunctions = gurglerConfig["lambdaFunctions"];
 const bucketPath = gurglerConfig["bucketPath"];
 const bucketRegion = gurglerConfig["bucketRegion"];
 const globs = gurglerConfig["localFileGlobs"];
@@ -38,6 +39,11 @@ if (_.isEmpty(packageName)) {
 
 if (_.isEmpty(bucketNames)) {
   console.error("The config value bucketNames is not set.");
+  process.exit(1);
+}
+
+if (_.isEmpty(lambdaFunctions)) {
+  console.error("The config value lambdaFunctions is not set.");
   process.exit(1);
 }
 
@@ -230,6 +236,7 @@ program
     cmdObj.v2 ? v2.releaseCmd(
       cmdObj, 
       bucketNames,
+      lambdaFunctions,
       environments,
       bucketPath,
       packageName,
