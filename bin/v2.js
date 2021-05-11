@@ -400,15 +400,28 @@ const sendReleaseMessage = (environment, version, packageName, slackConfig) => {
  *
  * @param {object} environment
  * @param {object} version
+ * @param {object} lambdaFunctions
+ * @param {string} packageName
+ * @param {object} slackConfig
  */
 
-const release = (environment, version, packageName, slackConfig) => {
+const release = (environment, version, lambdaFunctions, packageName, slackConfig) => {
   const lambda = new AWS.Lambda({
     apiVersion: '2015-03-31'
   });
 
+  if (!_.has(environment, 'serverEnvironment')) {
+    throw new Error(`The server environment for this environment is not set: ${environment.key}`);
+  }
+
+  if (!_.has(lambdaFunctions, environment.serverEnvironment)) {
+    throw new Error(`the lambda function for the following enviroment is not set: ${environment.serverEnvironment}`);
+  }
+
+  const functionName = lambdaFunctions[environment.serverEnvironment];
+
   const params = {
-    FunctionName: "drip-production-gurgler",
+    FunctionName: functionName,
     InvocationType: "RequestResponse",
     Payload: JSON.stringify({
       parameterName: environment.ssmKey,
@@ -501,7 +514,7 @@ const deployCmd = (bucketNames, gurglerPath, globs) => {
   });
 }
 
-const releaseCmd = (cmdObj, bucketNames, environments, bucketPath, packageName, slackConfig) => {
+const releaseCmd = (cmdObj, bucketNames, lambdaFunctions, environments, bucketPath, packageName, slackConfig) => {
   let environment;
   let version;
 
@@ -519,7 +532,7 @@ const releaseCmd = (cmdObj, bucketNames, environments, bucketPath, packageName, 
     })
     .then(answers => {
       if (answers.confirmation) {
-        release(environment, version, packageName, slackConfig);
+        release(environment, version, lambdaFunctions, packageName, slackConfig);
       } else {
         console.log("Cancelling release...");
       }

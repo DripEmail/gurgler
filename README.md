@@ -192,12 +192,14 @@ This example assumes your package.json is set up with the following scripts:
 *scripts/build.js is the script shown above.*
 
 ```json
-scripts {
-  "configure": "gurgler configure",
-  "build": "webpack --config webpack.config.js",
-  "configure-and-build": "node scripts/build.js",
-  "deploy": "gurgler deploy --v2",
-  "release": "gurgler release --v2",
+{
+    "scripts": {
+        "configure": "gurgler configure",
+        "build": "webpack --config webpack.config.js",
+        "configure-and-build": "node scripts/build.js",
+        "deploy": "gurgler deploy --v2",
+        "release": "gurgler release --v2"
+  }   
 }
 ```
 
