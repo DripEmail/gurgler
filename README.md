@@ -20,7 +20,7 @@ yarn add -d gurgler
 
 ### Setup a Slack App
 
-How to do this is well [documented on Slack's site](https://api.slack.com/slack-apps). After you go through the the process the essential bit is the Slack Webhook url.
+How to do this is well [documented on Slack's site](https://api.slack.com/slack-apps). After you go through the process the essential bit is the Slack Webhook url.
 
 ### Configuration
 
@@ -75,7 +75,7 @@ Gurgler has 2 commands.
 
 ### Deploy
 
-Deploy uploads an asset to S3. It also attaches a bit of meta data to the asset including the git sha of the commit at the point at which the asset was built.
+Deploy uploads an asset to S3. It also attaches a bit of metadata to the asset including the git sha of the commit at the point at which the asset was built.
 
 ```
 deploy <gitCommitSha> <gitBranch>  sends a new asset (at a particular commit on a particular branch) to the S3 bucket
