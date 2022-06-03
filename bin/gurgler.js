@@ -4,7 +4,6 @@ const program = require("commander");
 const path = require("path");
 const _ = require("lodash");
 
-const v1 = require("./v1");
 const v2 = require("./v2");
 
 /**
@@ -66,12 +65,12 @@ if (_.has(gurglerConfig, "slackWebHookUrl") || _.has(gurglerConfig, "slackUserna
     console.error("The config value slackWebHookUrl is not set.");
     process.exit(1);
   }
-  
+
   if (_.isEmpty(slackUsername)) {
     console.error("The config value slackUsername is not set.");
     process.exit(1);
   }
-  
+
   if (_.isEmpty(slackIconEmoji)) {
     console.error("The config value slackIconEmoji is not set.");
     process.exit(1);
@@ -155,7 +154,7 @@ const validateLocalFilePaths = () => {
   if (!_.has(gurglerConfig, "localFilePaths")) {
     console.error("The config value localFilePaths is not set.");
     process.exit(1);
-  } 
+  }
   if (!_.isArray(localFilePaths)) {
     console.error("The config value localFilePaths is not an array.");
     process.exit(1);
@@ -193,37 +192,13 @@ program
 program
   .command("deploy [gitCommitSha] [gitBranch]")
   .description("sends all assets to S3 (at a particular commit on a particular branch) appending the file's checksum to each filename")
-  .option("--v2", "sends all assets to S3 under a common versioned prefix (bucketPath + hash('commit|branch')) without appending the file's checksum to the filename")
   .action((gitCommitSha, gitBranch, cmdObj) => {
-
-    if (cmdObj.v2) {
       validateGlobs();
       v2.deployCmd(
         bucketNames,
         gurglerPath,
         globs,
       )
-    } else {
-
-      if (!gitCommitSha) {
-        console.error("error: missing required argument 'gitCommitSha'");
-        process.exit(1);
-      }
-      if (!gitBranch) {
-        console.error("error: missing required argument 'gitBranch'");
-        process.exit(1);
-      }
-
-      validateLocalFilePaths();
-
-      v1.deployCmd(
-        bucketNames, 
-        bucketPath,
-        localFilePaths,
-        gitCommitSha,
-        gitBranch
-      );
-    }
   });
 
 program
@@ -231,24 +206,17 @@ program
   .description("takes a previously deployed version and turns it on for a particular environment")
   .option("-e, --environment <environment>", "environment to deploy to")
   .option("-c, --commit <gitSha>", "the git sha (commit) of the version to deploy")
-  .option("--v2", "release v2 assets")
+
   .action((cmdObj) => {
-    cmdObj.v2 ? v2.releaseCmd(
-      cmdObj, 
+    v2.releaseCmd(
+      cmdObj,
       bucketNames,
       lambdaFunctions,
       environments,
       bucketPath,
       packageName,
       slackConfig
-    ) : v1.releaseCmd(
-      cmdObj,
-      bucketNames,
-      environments,
-      bucketPath,
-      packageName,
-      slackConfig
-    );
+    )
   });
 
 program.parse(process.argv);

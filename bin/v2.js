@@ -22,7 +22,7 @@ const utils = require("./utils");
  */
 
 const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo) => {
-  
+
   // TODO upload map file if it exists.
 
   // TODO send source maps to Honeybadger (but maybe just the ones we deploy)
@@ -31,7 +31,7 @@ const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo) => {
     if (err) {
       throw err;
     }
-    
+
     const { base, ext } = path.parse(localFilePath);
     const contentType = utils.getContentType(ext);
 
@@ -106,13 +106,6 @@ const requestCurrentlyReleasedVersions = (environments) => {
 };
 
 const determineEnvironment = (cmdObj, environments) => {
-  _.remove(environments, env => {
-    return (!(_.has(env, "v2") && env.v2))
-  });
-  if (environments.length === 0) {
-    console.log("> There are no configured v2 environments.\n");
-    process.exit(0);
-  }
   if (_.isEmpty(cmdObj.environment)) {
     return inquirer.prompt([ {
       type: 'list',
@@ -167,7 +160,7 @@ const getDeployedVersionList = (bucketName, bucketPath) => {
       if (token) {
         opts.ContinuationToken = token;
       }
-      
+
       s3.listObjectsV2(opts, (err, data) => {
         if (err) {
           reject()
@@ -180,7 +173,7 @@ const getDeployedVersionList = (bucketName, bucketPath) => {
           const {base, ext} = path.parse(version.Key);
           return (ext === ".json" && base.split(".")[1] === "gurgler");
         })
-        
+
         if (data.IsTruncated){
           listAllVersions(data.NextContinuationToken);
         }
@@ -209,7 +202,7 @@ const getDeployedVersionList = (bucketName, bucketPath) => {
 
 const formatAndLimitDeployedVersions = (versions, size) => {
   const returnedVersions = [];
-  
+
   _.reverse(
     _.sortBy(
       versions,
@@ -363,6 +356,8 @@ const determineVersionToRelease = (cmdObj, bucketNames, environment, bucketPath,
  *
  * @param {object} environment The users chosen environment.
  * @param {object} version The users chosen version.
+ * @param packageName
+ * @param slackConfig
  */
 
 const sendReleaseMessage = (environment, version, packageName, slackConfig) => {
@@ -375,12 +370,12 @@ const sendReleaseMessage = (environment, version, packageName, slackConfig) => {
       `_${version.displayName}_`,
       `<${slackConfig.githubRepoUrl}/commit/${version.gitSha}|View commit on GitHub>`,
     ].join("\n");
-  
+
     const slackChannel = environment.slackChannel;
-  
+
     if (!_.isEmpty(slackConfig.slackWebHookUrl) && !_.isEmpty(slackChannel)) {
       const webhook = new IncomingWebhook(slackConfig.slackWebHookUrl);
-  
+
       (async () => {
         await webhook.send({
           username: slackConfig.slackUsername,
@@ -391,7 +386,7 @@ const sendReleaseMessage = (environment, version, packageName, slackConfig) => {
       })().catch(err => console.error(err));
     }
   }
-  
+
   console.log(simpleMessage);
 };
 
@@ -451,8 +446,8 @@ const confirmRelease = (environment, version, packageName) => {
     default: false
   }]).then(answers => {
     if (
-      answers.confirmation && 
-      environment.masterOnly && 
+      answers.confirmation &&
+      environment.masterOnly &&
       version.gitBranch !== 'master'
     ) {
       return inquirer.prompt([{
@@ -468,11 +463,11 @@ const confirmRelease = (environment, version, packageName) => {
 const configureCmd = (gurglerPath, bucketPath, commit, branch) => {
   const hash = crypto.createHash('sha256');
   const raw = `${commit}|${branch}`;
-  
+
   hash.update(raw);
   const hashed = hash.digest('hex');
   const prefix = bucketPath + "/" + hashed
-  
+
   const data = JSON.stringify({
     commit,
     branch,
@@ -490,7 +485,7 @@ const configureCmd = (gurglerPath, bucketPath, commit, branch) => {
 }
 
 const deployCmd = (bucketNames, gurglerPath, globs) => {
-  fs.readFile(gurglerPath, (err, data) => {
+  fs.readFile(gurglerPath, 'utf-8', (err, data) => {
     if (err) {
       if (err.code === 'ENOENT') {
         console.log("Either gurgler.json has not been built or it has been removed. Run 'gurgler configure <git commit sha> <git branch>' and try again.");
@@ -499,7 +494,7 @@ const deployCmd = (bucketNames, gurglerPath, globs) => {
     }
 
     let localFilePaths = [gurglerPath];
-    
+
     globs.forEach(globb => {
       localFilePaths = localFilePaths.concat(glob.sync(globb.pattern, {
         ignore: globb.ignore
