@@ -1,10 +1,12 @@
 #! /usr/bin/env node
 const AWS = require("aws-sdk");
-const program = require("commander");
+const { Command } = require("commander");
 const path = require("path");
 const _ = require("lodash");
 
 const v2 = require("./v2");
+
+const program = new Command();
 
 /**
  * *******************
@@ -28,7 +30,6 @@ const slackUsername = gurglerConfig["slackUsername"];
 const slackIconEmoji = gurglerConfig["slackIconEmoji"];
 const githubRepoUrl = gurglerConfig["githubRepoUrl"];
 
-let localFilePaths = gurglerConfig["localFilePaths"];
 let slackConfig;
 
 if (_.isEmpty(packageName)) {
@@ -58,7 +59,7 @@ if (_.isEmpty(bucketRegion)) {
 
 // If at least one slack-related key is present in the gurgler config it is assumed Slack should be
 // used and all Slack config values are inspected. The omission of all slack-related keys rather
-// obviously indicates Slack is not intended to be used and we don"t need to inspect each key.
+// obviously indicates Slack is not intended to be used, and we don"t need to inspect each key.
 if (_.has(gurglerConfig, "slackWebHookUrl") || _.has(gurglerConfig, "slackUsername") || _.has(gurglerConfig, "slackIconEmoji")) {
 
   if (_.isEmpty(slackWebHookUrl)) {
@@ -114,30 +115,30 @@ const validateGlobs = () => {
     process.exit(1);
   }
 
-  globs.forEach(globb => {
-    if (!_.has(globb, "pattern")) {
+  globs.forEach(glob => {
+    if (!_.has(glob, "pattern")) {
       console.error("At least one glob pattern is not set in the config value localFileGlobs.");
       process.exit(1);
     }
-    if (!_.isString(globb.pattern)) {
+    if (!_.isString(glob.pattern)) {
       console.error("At least one glob pattern is not a string in the config value localFileGlobs.");
       process.exit(1);
     }
-    if (_.isEmpty(globb.pattern)) {
+    if (_.isEmpty(glob.pattern)) {
       console.error("At least one glob pattern is empty in the config value localFileGlobs.");
       process.exit(1);
     }
 
-    if (!_.has(globb, "ignore")) {
+    if (!_.has(glob, "ignore")) {
       return;
     }
 
-    if (!_.isArray(globb.ignore)) {
+    if (!_.isArray(glob.ignore)) {
       console.error("At least one glob ignore value is not an array.");
       process.exit(1);
     }
 
-    globb.ignore.forEach(pattern => {
+    glob.ignore.forEach(pattern => {
       if (!_.isString(pattern)) {
         console.error("At least one glob ignore pattern is not a string in the config value localFileGlobs.");
         process.exit(1);
@@ -148,32 +149,6 @@ const validateGlobs = () => {
       }
     });
   })
-}
-
-const validateLocalFilePaths = () => {
-  if (!_.has(gurglerConfig, "localFilePaths")) {
-    console.error("The config value localFilePaths is not set.");
-    process.exit(1);
-  }
-  if (!_.isArray(localFilePaths)) {
-    console.error("The config value localFilePaths is not an array.");
-    process.exit(1);
-  }
-  if (_.isEmpty(localFilePaths)) {
-    console.error("The config value localFilePaths is empty.");
-    process.exit(1);
-  }
-
-  localFilePaths.forEach(path => {
-    if (!_.isString(path)) {
-      console.error("One of the paths in localFilePaths is not a string.");
-      process.exit(1);
-    }
-    if (_.isEmpty(path)) {
-      console.error("One of the paths in localFilePaths is empty.");
-      process.exit(1);
-    }
-  });
 }
 
 program
@@ -192,12 +167,14 @@ program
 program
   .command("deploy [gitCommitSha] [gitBranch]")
   .description("sends all assets to S3 (at a particular commit on a particular branch) appending the file's checksum to each filename")
-  .action((gitCommitSha, gitBranch, cmdObj) => {
+  .option("-p --pretend", "Do not actually send the files")
+  .action((gitCommitSha, gitBranch, options) => {
       validateGlobs();
       v2.deployCmd(
         bucketNames,
         gurglerPath,
         globs,
+        options.pretend
       )
   });
 

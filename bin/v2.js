@@ -19,9 +19,10 @@ const {getGitInfo} = require("./git");
  * @param {string} prefix
  * @param {string} localFilePath
  * @param {string} gitInfo
+ * @param {Boolean} pretend
  */
 
-const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo) => {
+const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo, pretend = false) => {
 
   // TODO upload map file if it exists.
 
@@ -44,23 +45,28 @@ const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo) => {
     }
 
     _.forEach(bucketNames, (bucketName) => {
-      const s3 = new AWS.S3({
-        apiVersion: '2006-03-01',
-        params: {Bucket: bucketName}
-      });
+      if (pretend) {
+        console.log(`Only pretending to deploy ${localFilePath} to S3 bucket ${bucketName} ${remoteFilePath}`);
+      } else {
+        const s3 = new AWS.S3({
+          apiVersion: '2006-03-01',
+          params: {Bucket: bucketName}
+        });
 
-      s3.upload({
-        Key: remoteFilePath,
-        Body: data,
-        ACL: 'public-read',
-        Metadata: {'git-info': gitInfo},
-        ContentType: contentType,
-      }, (err) => {
-        if (err) {
-          throw err;
-        }
-        console.log(`Successfully deployed ${localFilePath} to S3 bucket ${bucketName} ${remoteFilePath}`);
-      });
+        s3.upload({
+          Key: remoteFilePath,
+          Body: data,
+          ACL: 'public-read',
+          Metadata: {'git-info': gitInfo},
+          ContentType: contentType,
+        }, (err) => {
+          if (err) {
+            throw err;
+          }
+          console.log(`Successfully deployed ${localFilePath} to S3 bucket ${bucketName} ${remoteFilePath}`);
+        });
+      }
+
     });
   });
 };
@@ -461,7 +467,14 @@ const configureCmd = (gurglerPath, bucketPath, commit, branch) => {
   })
 }
 
-const deployCmd = (bucketNames, gurglerPath, globs) => {
+/**
+ *
+ * @param bucketNames
+ * @param gurglerPath
+ * @param globs
+ * @param pretend {boolean}
+ */
+const deployCmd = (bucketNames, gurglerPath, globs, pretend= false) => {
   fs.readFile(gurglerPath, 'utf-8', (err, data) => {
     if (err) {
       if (err.code === 'ENOENT') {
@@ -481,7 +494,7 @@ const deployCmd = (bucketNames, gurglerPath, globs) => {
     const {prefix, raw} = JSON.parse(data)
 
     localFilePaths.forEach(localFilePath => {
-      readFileAndDeploy(bucketNames, prefix, localFilePath, raw);
+      readFileAndDeploy(bucketNames, prefix, localFilePath, raw, pretend);
     });
   });
 }
