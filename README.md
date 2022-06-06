@@ -71,7 +71,15 @@ Gurgler depends on the following.
  - You're using S3 buckets to host your frontend assets.
  - It uses AWS Systems Manager parameter store to keep track of the checksum of the current "released" asset.
 
-Gurgler has 2 commands.
+Gurgler has 3 commands.
+
+### Configure
+
+Use the `configure` command to build a `gurgler.json` in the project root.
+
+```
+Usage: gurgler configure [options] <gitCommitSha> <gitBranch>
+```
 
 ### Deploy
 
@@ -100,11 +108,9 @@ Options:
   -h, --help                       output usage information
 ```
 
-### Version 2
+### How it works
 
-There currently exist two deployment options while we phase into complete use of version 2. A version 1 deployment appends a file's checksum to the filename itself, allowing releases of individual files. Version 2 deploys all assets under a single common S3 bucket prefix which is the hash of both the git commit and branch to which those assets pertain. As of version 2.1, releases made under the v2 workflow (as described below) are made possible via a cross-account lambda and not direct access to parameter store.
-
-Version 2 also introduces a few new configuration changes and overall deployment workflow:
+Gurgler deploys all assets under a single common S3 bucket prefix which is the hash of both the git commit and branch to which those assets pertain. Releases depend on a cross-account lambda and not direct access to parameter store.
 
 * You now have the ability to set an environment to master-only, meaning you'll get a warning and additional confirmation prompt if you attempt to deploy non-master branch assets.
 
@@ -115,27 +121,26 @@ Version 2 also introduces a few new configuration changes and overall deployment
   "serverEnvironment": "production",
   "label": "Production",
   "slackChannel": "#deployments",
-  "masterOnly": true,
-  "v2": true
+  "masterOnly": true
 }
 ```
 
-* You must also (temporarily) add the `v2` key to any environment with which you wish to use version 2. This requirement will be removed once a full cutover to version 2 is made.
-
-* You can (and must) use file globs to describe which directories and/or files you'd like gurgler to deploy.
+* Use file globs to describe which directories and/or files you'd like gurgler to deploy.
 
 ```json
-"localFileGlobs": [
-  {
-    "pattern": "build/*",
-    "ignore": [
-      "*/garbage_file.json"
-    ]
-  }
-],
+{
+  "localFileGlobs": [
+    {
+      "pattern": "build/*",
+      "ignore": [
+        "*/garbage_file.json"
+      ]
+    }
+  ]
+}
 ```
 
-* Version 2 introduces a new CLI command `configure`. Use it to build a `gurgler.json` in the project root. Webpack can use this file as shown in the following example to know how to build internal references to other files in the build directory.
+* Use the `configure` command to build a `gurgler.json` in the project root. Webpack can use this file as shown in the following example to know how to build internal references to other files in the build directory.
 
 ```
 gurgler configure asdfasdfasdf some_branch
@@ -144,25 +149,25 @@ gurgler configure asdfasdfasdf some_branch
 Use `gurgler.publicPath` in your webpack config to know what the public path will be once deployed to S3.
 
 ```javascript
-const gurgler = require("gurgler")
+const gurgler = require("gurgler");
 
-...
+//...
 
 {
-  loader: "file-loader",
-    options: {
-      name: "[name].[ext]"
-      publicPath: gurgler.publicPath()
-    }
+  loader: "file-loader", 
+  options: {
+    name: "[name].[ext]"
+    publicPath: gurgler.publicPath()
+  }
 }
 ```
 
-Now you can build your assets and subsequently deploy the with `gurgler deploy --v2`. Note that unlike version 1, no arguments are provided to `deploy`.
+Now you can build your assets and subsequently deploy the with `gurgler deploy`.
 
-To release, simply add the `v2` flag:
+To release, run
 
 ```
-gurgler release --v2
+gurgler release
 ```
 
 You must run `configure` prior to every build in order to ensure your deploys are versioned under the correct commit and branch. You can easily set up a script to do so.
