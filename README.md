@@ -77,6 +77,10 @@ Gurgler has 3 commands.
 
 Use the `configure` command to build a `gurgler.json` in the project root.
 
+```
+Usage: gurgler configure [options] <gitCommitSha> <gitBranch>
+```
+
 ### Deploy
 
 Deploy uploads an asset to S3. It also attaches a bit of metadata to the asset including the git sha of the commit at the point at which the asset was built.
