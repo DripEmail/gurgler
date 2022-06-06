@@ -4,10 +4,10 @@ const inquirer = require('inquirer');
 const path = require('path');
 const _ = require('lodash');
 const crypto = require('crypto');
-const NodeGit = require('nodegit');
-const { IncomingWebhook } = require('@slack/webhook');
+const {IncomingWebhook} = require('@slack/webhook');
 const glob = require("glob");
 const utils = require("./utils");
+const {getGitInfo} = require("./git");
 
 /**
  * Send the file to S3. All files except gurgler.json are considered assets and will be prefixed with
@@ -19,9 +19,10 @@ const utils = require("./utils");
  * @param {string} prefix
  * @param {string} localFilePath
  * @param {string} gitInfo
+ * @param {Boolean} pretend
  */
 
-const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo) => {
+const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo, pretend = false) => {
 
   // TODO upload map file if it exists.
 
@@ -32,7 +33,7 @@ const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo) => {
       throw err;
     }
 
-    const { base, ext } = path.parse(localFilePath);
+    const {base, ext} = path.parse(localFilePath);
     const contentType = utils.getContentType(ext);
 
     let remoteFilePath;
@@ -44,23 +45,28 @@ const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo) => {
     }
 
     _.forEach(bucketNames, (bucketName) => {
-      const s3 = new AWS.S3({
-        apiVersion: '2006-03-01',
-        params: { Bucket: bucketName }
-      });
+      if (pretend) {
+        console.log(`Only pretending to deploy ${localFilePath} to S3 bucket ${bucketName} ${remoteFilePath}`);
+      } else {
+        const s3 = new AWS.S3({
+          apiVersion: '2006-03-01',
+          params: {Bucket: bucketName}
+        });
 
-      s3.upload({
-        Key: remoteFilePath,
-        Body: data,
-        ACL: 'public-read',
-        Metadata: { 'git-info': gitInfo },
-        ContentType: contentType,
-      },(err) => {
-        if (err) {
-          throw err;
-        }
-        console.log(`Successfully deployed ${localFilePath} to S3 bucket ${bucketName} ${remoteFilePath}`);
-      });
+        s3.upload({
+          Key: remoteFilePath,
+          Body: data,
+          ACL: 'public-read',
+          Metadata: {'git-info': gitInfo},
+          ContentType: contentType,
+        }, (err) => {
+          if (err) {
+            throw err;
+          }
+          console.log(`Successfully deployed ${localFilePath} to S3 bucket ${bucketName} ${remoteFilePath}`);
+        });
+      }
+
     });
   });
 };
@@ -107,7 +113,7 @@ const requestCurrentlyReleasedVersions = (environments) => {
 
 const determineEnvironment = (cmdObj, environments) => {
   if (_.isEmpty(cmdObj.environment)) {
-    return inquirer.prompt([ {
+    return inquirer.prompt([{
       type: 'list',
       name: 'environment',
       message: 'Which environment will receive this release?',
@@ -119,8 +125,7 @@ const determineEnvironment = (cmdObj, environments) => {
         }
       })
     }]);
-  }
-  else {
+  } else {
     return new Promise(((resolve) => {
       const environment = _.find(environments, e => e.key === cmdObj.environment);
       if (!environment) {
@@ -174,10 +179,9 @@ const getDeployedVersionList = (bucketName, bucketPath) => {
           return (ext === ".json" && base.split(".")[1] === "gurgler");
         })
 
-        if (data.IsTruncated){
+        if (data.IsTruncated) {
           listAllVersions(data.NextContinuationToken);
-        }
-        else {
+        } else {
           resolve(allVersions.map(version => {
             return {
               filepath: version.Key,
@@ -211,7 +215,7 @@ const formatAndLimitDeployedVersions = (versions, size) => {
   )
     .slice(0, size).forEach(version => {
 
-    const { base, ext } = path.parse(version.filepath);
+    const {base, ext} = path.parse(version.filepath);
     const split = base.split(".");
 
     // This check is technically not necessary assuming getDeployedVersionList only returns versions
@@ -259,40 +263,19 @@ const addGitSha = (version) => {
   });
 };
 
-const addGitInfo = (version, packageName) => {
+const  addGitInfo = async (version, packageName) => {
   const gitSha = version.gitSha;
 
-  return NodeGit.Repository.open('.')
-    .then(repo => {
-      return repo.getCommit(gitSha);
-    })
-    .catch(err => {
-      if (!(err.message.match(/unable to parse OID/)
-        || err.message.match(/no match for id/))) {
-        console.log(`Warning, could not get commit: git[${gitSha}],`, err.message.replace(/(\r\n|\n|\r)/gm, ''));
-      }
-      return undefined;
-    })
-    .then(commit => {
-      if (commit === undefined) {
-        version.displayName = version.lastModified.toLocaleDateString(
-          'en-US',
-          { month: '2-digit', day: '2-digit', year: 'numeric' }
-          );
-        const hashShort = utils.shortHash(version.hash);
-        version.displayName += (` | ${packageName}[${hashShort}]`);
-        return version;
-      }
+  const gitInfo = await getGitInfo(gitSha);
 
-      const author = commit.author();
-      const commitDateStr = commit.date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
-      const hashShort = utils.shortHash(version.hash);
-      const gitShaShort = utils.shortHash(gitSha);
-      const gitBranch = _.isEmpty(version.gitBranch) ? "" : _.truncate(version.gitBranch, {length: 15});
-      const gitMessage = _.truncate(commit.message(), {length: 30}).replace(/(\r\n|\n|\r)/gm, '');
-      version.displayName = `${commitDateStr} | ${packageName}[${hashShort}] | ${author.name()} | git[${gitShaShort}] | [${gitBranch}] ${gitMessage}`;
-      return version;
-    });
+  const author = gitInfo.get("author").padEnd(16);
+  const commitDateStr = gitInfo.get("date").padEnd(16);
+  const hashShort = utils.shortHash(version.hash);
+  const gitShaShort = utils.shortHash(gitSha);
+  const gitBranch = _.isEmpty(version.gitBranch) ? "" : _.truncate(version.gitBranch, {length: 15});
+  const gitMessage = _.truncate(gitInfo.get("message"), {length: 30}).replace(/(\r\n|\n|\r)/gm, '');
+  version.displayName = `${commitDateStr} | ${packageName}[${hashShort}] | ${author} | git[${gitShaShort}] | [${gitBranch}] ${gitMessage}`;
+  return version;
 };
 
 const determineVersionToRelease = (cmdObj, bucketNames, environment, bucketPath, packageName) => {
@@ -317,15 +300,15 @@ const determineVersionToRelease = (cmdObj, bucketNames, environment, bucketPath,
         console.log("\n> There are no currently deployed versions. Run 'gurgler configure <gitCommitSha> <gitBranch>' and `gurgler deploy` and try again.\n");
         process.exit(0);
       }
-      if( _.isEmpty(cmdObj.commit)) {
-        return inquirer.prompt([ {
-            type: 'list',
-            name: 'version',
-            message: 'Which deployed version would you like to release?',
-            choices: versions.map(version => {
-                return {name: version.displayName, value: version}
-              }
-            )
+      if (_.isEmpty(cmdObj.commit)) {
+        return inquirer.prompt([{
+          type: 'list',
+          name: 'version',
+          message: 'Which deployed version would you like to release?',
+          choices: versions.map(version => {
+              return {name: version.displayName, value: version}
+            }
+          )
         }])
       } else {
         return new Promise(((resolve) => {
@@ -484,7 +467,14 @@ const configureCmd = (gurglerPath, bucketPath, commit, branch) => {
   })
 }
 
-const deployCmd = (bucketNames, gurglerPath, globs) => {
+/**
+ *
+ * @param bucketNames
+ * @param gurglerPath
+ * @param globs
+ * @param pretend {boolean}
+ */
+const deployCmd = (bucketNames, gurglerPath, globs, pretend= false) => {
   fs.readFile(gurglerPath, 'utf-8', (err, data) => {
     if (err) {
       if (err.code === 'ENOENT') {
@@ -501,10 +491,10 @@ const deployCmd = (bucketNames, gurglerPath, globs) => {
       }))
     })
 
-    const { prefix, raw } = JSON.parse(data)
+    const {prefix, raw} = JSON.parse(data)
 
     localFilePaths.forEach(localFilePath => {
-      readFileAndDeploy(bucketNames, prefix, localFilePath, raw);
+      readFileAndDeploy(bucketNames, prefix, localFilePath, raw, pretend);
     });
   });
 }
