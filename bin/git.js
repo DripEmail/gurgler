@@ -6,12 +6,12 @@ const {exec} = require('child_process');
  */
 const getCommitAuthor = (gitSha) => {
   return new Promise((resolve, reject) => {
-    exec(`git show --pretty='%aN' ${gitSha}`, (err, stdout) => {
+    exec(`git show --pretty='%aN' --no-patch ${gitSha}`, (err, stdout) => {
       if (err) {
         console.error(`exec error: ${err}`);
         reject();
       }
-      resolve(stdout);
+      resolve(stdout.trim());
     })
   })
 }
@@ -27,7 +27,7 @@ const getBranch = (gitSha) => {
         console.error(`exec error: ${err}`);
         reject();
       }
-      resolve(stdout);
+      resolve(stdout.trim());
     })
   })
 }
@@ -38,12 +38,12 @@ const getBranch = (gitSha) => {
  */
 const getCommitMessage = (gitSha) => {
   return new Promise((resolve, reject) => {
-    exec(`git log --pretty='%s' -1 ${gitSha}`, (err, stdout) => {
+    exec(`git show --pretty='%s' --no-patch ${gitSha}`, (err, stdout) => {
       if (err) {
         console.error(`exec error: ${err}`);
         reject();
       }
-      resolve(stdout);
+      resolve(stdout.trim());
     })
   })
 }
@@ -54,12 +54,17 @@ const getCommitMessage = (gitSha) => {
  */
 const getCommitDate = (gitSha) => {
   return new Promise((resolve, reject) => {
-    exec(`git log --pretty='%aD' -1 ${gitSha}`, (err, stdout) => {
+    exec(`git show --pretty='%ah' --no-patch ${gitSha}`, (err, stdout, stderr) => {
       if (err) {
         console.error(`exec error: ${err}`);
         reject();
       }
-      resolve(stdout);
+
+      if (stderr) {
+        console.error(`exec error getCommitDate: ${stderr}`);
+      }
+
+      resolve(stdout.trim());
     })
   })
 }
@@ -78,10 +83,13 @@ const getGitInfo = async (gitSha) => {
     ]).then(values => {
     const gitInfo = new Map();
     const [author, branch, message, date] = values;
+
+    gitInfo.set("gitSha", gitSha);
     gitInfo.set("author", author);
     gitInfo.set("branch", branch);
     gitInfo.set("message", message);
     gitInfo.set("date", date);
+
     return gitInfo;
   });
 }

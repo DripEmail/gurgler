@@ -263,18 +263,18 @@ const addGitSha = (version) => {
   });
 };
 
-const addGitInfo = (version, packageName) => {
+const  addGitInfo = async (version, packageName) => {
   const gitSha = version.gitSha;
 
-  const gitInfo = getGitInfo(gitSha);
+  const gitInfo = await getGitInfo(gitSha);
 
-  const author = gitInfo.get("author");
-  const commitDateStr = gitInfo.get("date");
+  const author = gitInfo.get("author").padEnd(16);
+  const commitDateStr = gitInfo.get("date").padEnd(16);
   const hashShort = utils.shortHash(version.hash);
   const gitShaShort = utils.shortHash(gitSha);
   const gitBranch = _.isEmpty(version.gitBranch) ? "" : _.truncate(version.gitBranch, {length: 15});
   const gitMessage = _.truncate(gitInfo.get("message"), {length: 30}).replace(/(\r\n|\n|\r)/gm, '');
-  version.displayName = `${commitDateStr} | ${packageName}[${hashShort}] | ${author.name()} | git[${gitShaShort}] | [${gitBranch}] ${gitMessage}`;
+  version.displayName = `${commitDateStr} | ${packageName}[${hashShort}] | ${author} | git[${gitShaShort}] | [${gitBranch}] ${gitMessage}`;
   return version;
 };
 
