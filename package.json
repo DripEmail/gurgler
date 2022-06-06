@@ -8,14 +8,13 @@
   "license": "MIT",
   "private": false,
   "dependencies": {
-    "@slack/webhook": "6.0.0",
-    "aws-sdk": "2.857.0",
-    "commander": "7.1.0",
-    "crypto-js": "4.0.0",
-    "dotenv": "8.2.0",
-    "inquirer": "8.0.0",
+    "@slack/webhook": "6.1.0",
+    "aws-sdk": "2.1148.0",
+    "commander": "9.3.0",
+    "crypto-js": "4.1.1",
+    "dotenv": "16.0.1",
+    "inquirer": "8.2.4",
     "lodash": "4.17.21",
-    "nodegit": "0.27.0",
     "request": "2.88.2"
   },
   "bin": {
@@ -24,6 +23,7 @@
   "devDependencies": {
     "eslint": "^8.17.0",
     "eslint-config-prettier": "^8.5.0",
-    "eslint-plugin-prettier": "^4.0.0"
+    "eslint-plugin-prettier": "^4.0.0",
+    "prettier": "^2.6.2"
   }
 }
