@@ -75,6 +75,7 @@ Gurgler has 3 commands.
 
 ### Configure
 
+Use the `configure` command to build a `gurgler.json` in the project root.
 
 ### Deploy
 
