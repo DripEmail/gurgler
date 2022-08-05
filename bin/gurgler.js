@@ -199,7 +199,7 @@ program
 
 
 program
-  .command("cleanup")
+  .command("delete-old-deploys")
   .description("delete artifacts from S3 that are older than a year and not being used")
 
   .action((cmdObj) => {
