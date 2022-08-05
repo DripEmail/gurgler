@@ -6,8 +6,9 @@ const {exec} = require('child_process');
  */
 const getCommitAuthor = (gitSha) => {
   return new Promise((resolve, reject) => {
-    exec(`git show --pretty='%aN' --no-patch ${gitSha}`, (err, stdout) => {
+    exec(`git show --pretty='%aN' --no-patch ${gitSha}`, (err, stdout, stderr) => {
       if (err) {
+        console.error("getCommitAuthor stderr", stderr);
         if (err.message.includes("unknown revision or path not in the working tree")) {
           reject(new Error(`Unknown commit hash when trying to look up the author: ${gitSha}`));
         } else {
@@ -25,11 +26,13 @@ const getCommitAuthor = (gitSha) => {
  */
 const getBranch = (gitSha) => {
   return new Promise((resolve, reject) => {
-    exec(`git rev-parse --abbrev-ref ${gitSha}`, (err, stdout) => {
+    exec(`git rev-parse --abbrev-ref ${gitSha}`, (err, stdout, stderr) => {
       if (err) {
+        console.error("getBranch stderr", stderr);
         if (err.message.includes("unknown revision or path not in the working tree")) {
           reject(new Error(`Unknown commit hash when trying to look up the branch: ${gitSha}`));
         } else {
+          console.error("getBranch", err);
           reject(err);
         }
       }
@@ -44,8 +47,9 @@ const getBranch = (gitSha) => {
  */
 const getCommitMessage = (gitSha) => {
   return new Promise((resolve, reject) => {
-    exec(`git show --pretty='%s' --no-patch ${gitSha}`, (err, stdout) => {
+    exec(`git show --pretty='%s' --no-patch ${gitSha}`, (err, stdout, stderr) => {
       if (err) {
+        console.error("getCommitMessage stderr", stderr);
         if (err.message.includes("unknown revision or path not in the working tree")) {
           reject(new Error(`Unknown commit hash when trying to look the commit message: ${gitSha}`));
         } else {
@@ -65,9 +69,11 @@ const getCommitDate = (gitSha) => {
   return new Promise((resolve, reject) => {
     exec(`git show --pretty='%ah' --no-patch ${gitSha}`, (err, stdout, stderr) => {
       if (err) {
+        console.error("getCommitDate stderr", stderr);
         if (err.message.includes("unknown revision or path not in the working tree")) {
           reject(new Error(`Unknown commit hash when trying to look up the date of the commit: ${gitSha}`));
         } else {
+          console.error("getCommitDate", err);
           reject(err);
         }
       }

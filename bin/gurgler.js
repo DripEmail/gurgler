@@ -196,4 +196,23 @@ program
     )
   });
 
+
+
+program
+  .command("cleanup")
+  .description("delete artifacts from S3 that are older than a year and not being used")
+
+  .action((cmdObj) => {
+    v2.cleanupCmd(
+      cmdObj,
+      bucketNames,
+      lambdaFunctions,
+      environments,
+      bucketPath,
+      packageName,
+      slackConfig
+    )
+  });
+
+
 program.parse(process.argv);

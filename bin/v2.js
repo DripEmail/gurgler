@@ -196,6 +196,44 @@ const getDeployedVersionList = (bucketName, bucketPath) => {
   });
 };
 
+const getDeployedVersionListWithMetadata = (bucketName, bucketPath, packageName) => {
+  const stuff = async (versions) => {
+    let artifacts = [];
+    for (const version of versions) {
+      const artifact = await addGitInfo(version, packageName);
+      artifacts.push(artifact);
+    }
+    return Promise.resolve(artifacts)
+  }
+
+  const stuff2 = async (versions) => {
+    let artifacts = [];
+    for (const version of versions) {
+      const {base, ext} = path.parse(version.filepath);
+      const split = base.split(".");
+
+      if (ext === ".json" && split[1] === "gurgler") {
+        version.hash = split[0];
+        version.hashDigest = version.hash.substr(0, 7);
+        artifacts.push(version);
+      }
+    }
+    return Promise.resolve(artifacts)
+  }
+
+  return getDeployedVersionList(bucketName, bucketPath)
+    .then(versions => {
+      return _.sortBy(versions, ['lastModified'])
+    })
+    .then(stuff2)
+    .then(versions => {
+      return Promise.all(versions.map(version => {
+        return addGitSha(version)
+      }));
+    })
+    .then(stuff)
+}
+
 /**
  * Sort the list of versions so the latest are first then return a slice of the first so many.
  *
@@ -237,7 +275,7 @@ const formatAndLimitDeployedVersions = (versions, size) => {
  * @returns {Promise<object>}
  */
 
-const addGitSha = (version) => {
+const addGitSha = async (version) => {
   const s3 = new AWS.S3({
     apiVersion: '2006-03-01'
   });
@@ -263,7 +301,7 @@ const addGitSha = (version) => {
   });
 };
 
-const  addGitInfo = async (version, packageName) => {
+const addGitInfo = async (version, packageName) => {
   const gitSha = version.gitSha;
 
   const gitInfo = await getGitInfo(gitSha);
@@ -275,6 +313,7 @@ const  addGitInfo = async (version, packageName) => {
   const gitBranch = _.isEmpty(version.gitBranch) ? "" : _.truncate(version.gitBranch, {length: 15});
   const gitMessage = _.truncate(gitInfo.get("message"), {length: 30}).replace(/(\r\n|\n|\r)/gm, '');
   version.displayName = `${commitDateStr} | ${packageName}[${hashShort}] | ${author} | git[${gitShaShort}] | [${gitBranch}] ${gitMessage}`;
+
   return version;
 };
 
@@ -525,8 +564,68 @@ const releaseCmd = (cmdObj, bucketNames, lambdaFunctions, environments, bucketPa
     .catch(err => console.error(err));
 }
 
+const cleanupCmd = async (cmdObj, bucketNames, lambdaFunctions, environments, bucketPath, packageName, slackConfig) => {
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const lastYear = currentYear - 1;
+  const oneYearAgo = new Date(Date.UTC(lastYear, now.getUTCMonth(), now.getUTCDate(), now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds()));
+
+  // This line might be too cleaver. It's getting all the server environments and then getting an array of just the unique ones.
+  const serverEnvironments = [...new Set(environments.map(environment => environment.serverEnvironment))];
+
+  const confirmationQuestions = serverEnvironments.map(serverEnvironment => {
+    const bucketName = _.get(bucketNames, serverEnvironment);
+    return {
+      type: 'confirm',
+      name: serverEnvironment,
+      message: `Do you want to clean up the gurgler assets in the S3 bucket ${bucketName} with the path: ${bucketPath}?`,
+      default: false
+    }
+  });
+
+  inquirer.prompt(confirmationQuestions).then(answers => {
+
+    console.log("answers", answers)
+
+    serverEnvironments.map(serverEnvironment => {
+      if (answers[serverEnvironment]) {
+        const bucketName = _.get(bucketNames, serverEnvironment);
+        console.log(`Cleaning up gurgler assets in the S3 bucket ${bucketName} with the path: ${bucketPath} `);
+
+        requestCurrentlyReleasedVersions(environments).then(releasedVersions => {
+          getDeployedVersionListWithMetadata(bucketName, bucketPath, packageName).then(deployedArtifacts => {
+            const oldArtifacts = deployedArtifacts
+              .filter(artifact => {
+                // only allow an asset to be deleted if it's older than a year
+                return artifact.lastModified.getTime() < oneYearAgo.getTime()
+              })
+              .filter(artifact => {
+                // only allow an asset to be deleted if it's not being used in any of the environments
+                for (const releasedVersion of releasedVersions) {
+                  console.log("test", releasedVersion.releasedHash, artifact.hash);
+                  if (releasedVersion.releasedHash === artifact.hash) {
+                    return false;
+                  }
+                }
+                return true;
+              })
+
+            console.log("releasedVersions", releasedVersions);
+
+            console.log(`We would clean up ${oldArtifacts.length} ${packageName} artifacts in ${serverEnvironment}`);
+
+          })
+        })
+      }
+    });
+  });
+}
+
+
 module.exports = {
   configureCmd,
   deployCmd,
-  releaseCmd
+  releaseCmd,
+  cleanupCmd
 }
