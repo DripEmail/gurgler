@@ -8,6 +8,7 @@ const {IncomingWebhook} = require('@slack/webhook');
 const glob = require("glob");
 const utils = require("./utils");
 const {getGitInfo} = require("./git");
+const {emptyS3Directory} = require("./utils");
 
 /**
  * Send the file to S3. All files except gurgler.json are considered assets and will be prefixed with
@@ -185,6 +186,7 @@ const getDeployedVersionList = (bucketName, bucketPath) => {
           resolve(allVersions.map(version => {
             return {
               filepath: version.Key,
+              directoryPath: version.Key.split(".gurgler.json")[0],
               lastModified: version.LastModified,
               bucket: bucketName,
             }
@@ -215,6 +217,7 @@ const getDeployedVersionListWithMetadata = (bucketName, bucketPath, packageName)
       if (ext === ".json" && split[1] === "gurgler") {
         version.hash = split[0];
         version.hashDigest = version.hash.substr(0, 7);
+        version.dirFilepath = split[0];
         artifacts.push(version);
       }
     }
@@ -564,12 +567,14 @@ const releaseCmd = (cmdObj, bucketNames, lambdaFunctions, environments, bucketPa
     .catch(err => console.error(err));
 }
 
-const cleanupCmd = async (cmdObj, bucketNames, lambdaFunctions, environments, bucketPath, packageName, slackConfig) => {
+const cleanupCmd = async (cmdObj, bucketNames, lambdaFunctions, environments, bucketPath, packageName) => {
 
   const now = new Date();
-  const currentYear = now.getFullYear();
-  const lastYear = currentYear - 1;
-  const oneYearAgo = new Date(Date.UTC(lastYear, now.getUTCMonth(), now.getUTCDate(), now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds()));
+  //const currentYear = now.getUTCFullYear();
+  //const lastYear = currentYear - 1;
+  //const oneYearAgo = new Date(Date.UTC(lastYear, now.getUTCMonth(), now.getUTCDate(), now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds()));
+  const nintyDaysAgo = new Date(now.getTime() - (1000 * 60 * 60 * 24 * 90));
+
 
   // This line might be too cleaver. It's getting all the server environments and then getting an array of just the unique ones.
   const serverEnvironments = [...new Set(environments.map(environment => environment.serverEnvironment))];
@@ -585,37 +590,82 @@ const cleanupCmd = async (cmdObj, bucketNames, lambdaFunctions, environments, bu
   });
 
   inquirer.prompt(confirmationQuestions).then(answers => {
-
-    console.log("answers", answers)
-
     serverEnvironments.map(serverEnvironment => {
       if (answers[serverEnvironment]) {
         const bucketName = _.get(bucketNames, serverEnvironment);
         console.log(`Cleaning up gurgler assets in the S3 bucket ${bucketName} with the path: ${bucketPath} `);
 
         requestCurrentlyReleasedVersions(environments).then(releasedVersions => {
-          getDeployedVersionListWithMetadata(bucketName, bucketPath, packageName).then(deployedArtifacts => {
+          return getDeployedVersionListWithMetadata(bucketName, bucketPath, packageName).then(deployedArtifacts => {
+
+            console.log(`There are currently a total of ${deployedArtifacts.length} deployed artifacts in ${serverEnvironment}.`);
+
             const oldArtifacts = deployedArtifacts
               .filter(artifact => {
                 // only allow an asset to be deleted if it's older than a year
-                return artifact.lastModified.getTime() < oneYearAgo.getTime()
+                return artifact.lastModified.getTime() < nintyDaysAgo.getTime()
               })
               .filter(artifact => {
                 // only allow an asset to be deleted if it's not being used in any of the environments
                 for (const releasedVersion of releasedVersions) {
-                  console.log("test", releasedVersion.releasedHash, artifact.hash);
                   if (releasedVersion.releasedHash === artifact.hash) {
                     return false;
                   }
                 }
                 return true;
               })
+            console.log(`We are going to delete ${oldArtifacts.length} ${packageName} artifacts in ${serverEnvironment}`);
 
-            console.log("releasedVersions", releasedVersions);
-
-            console.log(`We would clean up ${oldArtifacts.length} ${packageName} artifacts in ${serverEnvironment}`);
-
+            return oldArtifacts;
           })
+        })
+
+          .then(artifactsToDelete => {
+            for (const artifact of artifactsToDelete) {
+              console.log(artifact.displayName);
+            }
+            inquirer.prompt({
+              type: 'confirm',
+              name: "reallyDelete",
+              message: `Really delete these assets in the S3 bucket ${bucketName} with the path: ${bucketPath}?`,
+              default: false
+            }).then(answers => {
+              if (answers.reallyDelete) {
+                for (const artifact of artifactsToDelete) {
+
+                  console.log("Deleting", artifact.hash);
+
+                  const s3 = new AWS.S3({
+                    apiVersion: '2006-03-01'
+                  });
+
+                  emptyS3Directory(s3, bucketName, artifact.directoryPath);
+
+                  const paramsOfObjectsToDelete = {
+                    Bucket: bucketName,
+                    Delete: {
+                      Objects: [
+                        {
+                          Key: artifact.filepath
+                        },
+                        {
+                          Key: artifact.directoryPath
+                        }
+                      ],
+                    }
+                  };
+
+                  s3.deleteObjects(paramsOfObjectsToDelete, function(err, data) {
+                    if (err) console.error(err, err.stack); // an error occurred
+                    else     console.log(data);           // successful response
+                  });
+                }
+                console.log("Deleted.")
+              } else {
+                console.log("Very well, not deleting anything then.")
+              }
+            })
+
         })
       }
     });
