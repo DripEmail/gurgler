@@ -8,7 +8,7 @@ const {IncomingWebhook} = require('@slack/webhook');
 const glob = require("glob");
 const utils = require("./utils");
 const {getGitInfo} = require("./git");
-const {emptyS3Directory, shortHash} = require("./utils");
+const {emptyS3Directory, makeHashDigest} = require("./utils");
 
 /**
  * Send the file to S3. All files except gurgler.json are considered assets and will be prefixed with
@@ -104,7 +104,7 @@ const requestCurrentlyReleasedVersions = (environments) => {
         const value = _.find(data.Parameters, v => env.ssmKey === v.Name);
 
         env.releasedHash = _.get(value, "Value", "Unreleased!");
-        env.releaseHashShort = env.releasedHash === "Unreleased!" ? "Unreleased!" : utils.shortHash(env.releasedHash)
+        env.releaseHashShort = env.releasedHash === "Unreleased!" ? "Unreleased!" : utils.makeHashDigest(env.releasedHash)
         env.releaseDateStr = _.get(value, "LastModifiedDate");
 
         return env;
@@ -211,7 +211,7 @@ const getDeployedVersionListWithMetadata = (bucketName, bucketPath, packageName)
 
       if (ext === ".json" && split[1] === "gurgler") {
         version.hash = split[0];
-        version.hashDigest = shortHash(version.hash);
+        version.hashDigest = makeHashDigest(version.hash);
         version.dirFilepath = split[0];
         artifacts.push(version);
       }
@@ -267,7 +267,7 @@ const formatAndLimitDeployedVersions = (versions, size) => {
     //  matching these criteria.
     if (ext === ".json" && split[1] === "gurgler") {
       version.hash = split[0];
-      version.hashDigest = shortHash(version.hash);
+      version.hashDigest = makeHashDigest(version.hash);
       returnedVersions.push(version);
     }
   });
@@ -300,7 +300,7 @@ const addGitSha = async (version) => {
       if (metaData !== '' && metaData !== undefined) {
         const parsedMetaData = metaData.split('|');
         version.gitSha = parsedMetaData[0];
-        version.gitShaDigest = shortHash(parsedMetaData[0]);
+        version.gitShaDigest = makeHashDigest(parsedMetaData[0]);
         version.gitBranch = parsedMetaData[1];
       }
       return resolve(version);
@@ -315,8 +315,8 @@ const addGitInfo = async (version, packageName) => {
 
   const author = gitInfo.get("author").padEnd(16);
   const commitDateStr = gitInfo.get("date").padEnd(16);
-  const hashShort = utils.shortHash(version.hash);
-  const gitShaShort = utils.shortHash(gitSha);
+  const hashShort = utils.makeHashDigest(version.hash);
+  const gitShaShort = utils.makeHashDigest(gitSha);
   const gitBranch = _.isEmpty(version.gitBranch) ? "" : _.truncate(version.gitBranch, {length: 15});
   const gitMessage = _.truncate(gitInfo.get("message"), {length: 30}).replace(/(\r\n|\n|\r)/gm, '');
   version.displayName = `${commitDateStr} | ${packageName}[${hashShort}] | ${author} | git[${gitShaShort}] | [${gitBranch}] ${gitMessage}`;

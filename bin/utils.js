@@ -1,4 +1,4 @@
-const shortHash = hash => hash.substring(0, 7);
+const makeHashDigest = hash => hash.substring(0, 7);
 
 const getContentType = (ext) => {
   let contentType = "application/octet-stream";
@@ -47,7 +47,7 @@ async function emptyS3Directory(s3, bucket, dir) {
 }
 
 module.exports = {
-  shortHash,
+  makeHashDigest,
   getContentType,
   emptyS3Directory
 };
