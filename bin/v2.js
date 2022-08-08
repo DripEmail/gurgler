@@ -8,7 +8,7 @@ const {IncomingWebhook} = require('@slack/webhook');
 const glob = require("glob");
 const utils = require("./utils");
 const {getGitInfo} = require("./git");
-const {emptyS3Directory} = require("./utils");
+const {emptyS3Directory, shortHash} = require("./utils");
 
 /**
  * Send the file to S3. All files except gurgler.json are considered assets and will be prefixed with
@@ -54,6 +54,7 @@ const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo, pretend 
           params: {Bucket: bucketName}
         });
 
+        // noinspection JSCheckFunctionSignatures
         s3.upload({
           Key: remoteFilePath,
           Body: data,
@@ -73,7 +74,7 @@ const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo, pretend 
 };
 
 /**
- * Get the currently release values for all the environments.
+ * Get the currently released values for all the environments.
  *
  * @param environments
  * @returns {Promise<[{object}]>}
@@ -81,6 +82,7 @@ const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo, pretend 
 
 const requestCurrentlyReleasedVersions = (environments) => {
 
+  // noinspection JSUnresolvedVariable
   const ssmKeys = environments.map(env => env.ssmKey);
 
   const ssm = new AWS.SSM({
@@ -98,6 +100,7 @@ const requestCurrentlyReleasedVersions = (environments) => {
       }
 
       const environmentsWithReleaseData = environments.map(env => {
+        // noinspection JSUnresolvedVariable
         const value = _.find(data.Parameters, v => env.ssmKey === v.Name);
 
         env.releasedHash = _.get(value, "Value", "Unreleased!");
@@ -199,7 +202,24 @@ const getDeployedVersionList = (bucketName, bucketPath) => {
 };
 
 const getDeployedVersionListWithMetadata = (bucketName, bucketPath, packageName) => {
-  const stuff = async (versions) => {
+
+  const filterFilesToFindGurglerDeploys = async (versions) => {
+    let artifacts = [];
+    for (const version of versions) {
+      const {base, ext} = path.parse(version.filepath);
+      const split = base.split(".");
+
+      if (ext === ".json" && split[1] === "gurgler") {
+        version.hash = split[0];
+        version.hashDigest = shortHash(version.hash);
+        version.dirFilepath = split[0];
+        artifacts.push(version);
+      }
+    }
+    return Promise.resolve(artifacts)
+  }
+
+  const decorateArtifactsWithGitInfo = async (versions) => {
     let artifacts = [];
     for (const version of versions) {
       const artifact = await addGitInfo(version, packageName);
@@ -208,33 +228,17 @@ const getDeployedVersionListWithMetadata = (bucketName, bucketPath, packageName)
     return Promise.resolve(artifacts)
   }
 
-  const stuff2 = async (versions) => {
-    let artifacts = [];
-    for (const version of versions) {
-      const {base, ext} = path.parse(version.filepath);
-      const split = base.split(".");
-
-      if (ext === ".json" && split[1] === "gurgler") {
-        version.hash = split[0];
-        version.hashDigest = version.hash.substr(0, 7);
-        version.dirFilepath = split[0];
-        artifacts.push(version);
-      }
-    }
-    return Promise.resolve(artifacts)
-  }
-
   return getDeployedVersionList(bucketName, bucketPath)
     .then(versions => {
       return _.sortBy(versions, ['lastModified'])
     })
-    .then(stuff2)
+    .then(filterFilesToFindGurglerDeploys)
     .then(versions => {
       return Promise.all(versions.map(version => {
         return addGitSha(version)
       }));
     })
-    .then(stuff)
+    .then(decorateArtifactsWithGitInfo)
 }
 
 /**
@@ -259,11 +263,11 @@ const formatAndLimitDeployedVersions = (versions, size) => {
     const {base, ext} = path.parse(version.filepath);
     const split = base.split(".");
 
-    // This check is technically not necessary assuming getDeployedVersionList only returns versions
-    // matching this criteria.
+    // This check is strictly not necessary assuming getDeployedVersionList only returns versions
+    //  matching these criteria.
     if (ext === ".json" && split[1] === "gurgler") {
       version.hash = split[0];
-      version.hashDigest = version.hash.substr(0, 7);
+      version.hashDigest = shortHash(version.hash);
       returnedVersions.push(version);
     }
   });
@@ -296,7 +300,7 @@ const addGitSha = async (version) => {
       if (metaData !== '' && metaData !== undefined) {
         const parsedMetaData = metaData.split('|');
         version.gitSha = parsedMetaData[0];
-        version.gitShaDigest = parsedMetaData[0].substr(0, 7);
+        version.gitShaDigest = shortHash(parsedMetaData[0]);
         version.gitBranch = parsedMetaData[1];
       }
       return resolve(version);
@@ -321,8 +325,10 @@ const addGitInfo = async (version, packageName) => {
 };
 
 const determineVersionToRelease = (cmdObj, bucketNames, environment, bucketPath, packageName) => {
+  // noinspection JSUnresolvedVariable
   const bucketName = _.get(bucketNames, environment.serverEnvironment);
   if (!bucketName) {
+    // noinspection JSUnresolvedVariable
     console.error(`The server environment ${environment.serverEnvironment} does not exist.`)
     process.exit(1);
   }
@@ -396,6 +402,7 @@ const sendReleaseMessage = (environment, version, packageName, slackConfig) => {
       `<${slackConfig.githubRepoUrl}/commit/${version.gitSha}|View commit on GitHub>`,
     ].join("\n");
 
+    // noinspection JSUnresolvedVariable
     const slackChannel = environment.slackChannel;
 
     if (!_.isEmpty(slackConfig.slackWebHookUrl) && !_.isEmpty(slackChannel)) {
@@ -434,12 +441,16 @@ const release = (environment, version, lambdaFunctions, packageName, slackConfig
     throw new Error(`The server environment for this environment is not set: ${environment.key}`);
   }
 
+  // noinspection JSUnresolvedVariable
   if (!_.has(lambdaFunctions, environment.serverEnvironment)) {
-    throw new Error(`the lambda function for the following enviroment is not set: ${environment.serverEnvironment}`);
+    // noinspection JSUnresolvedVariable
+    throw new Error(`the lambda function for the following environment is not set: ${environment.serverEnvironment}`);
   }
 
+  // noinspection JSUnresolvedVariable
   const functionName = lambdaFunctions[environment.serverEnvironment];
 
+  // noinspection JSUnresolvedVariable
   const params = {
     FunctionName: functionName,
     InvocationType: "RequestResponse",
@@ -470,11 +481,13 @@ const confirmRelease = (environment, version, packageName) => {
     message: `Do you want to release ${packageName} git[${version.gitShaDigest}] hash[${version.hashDigest}] to ${environment.key}?`,
     default: false
   }]).then(answers => {
+    // noinspection JSUnresolvedVariable
     if (
       answers.confirmation &&
       environment.masterOnly &&
       version.gitBranch !== 'master'
     ) {
+      // noinspection JSUnresolvedVariable
       return inquirer.prompt([{
         type: 'confirm',
         name: 'confirmation',
@@ -527,9 +540,9 @@ const deployCmd = (bucketNames, gurglerPath, globs, pretend= false) => {
 
     let localFilePaths = [gurglerPath];
 
-    globs.forEach(globb => {
-      localFilePaths = localFilePaths.concat(glob.sync(globb.pattern, {
-        ignore: globb.ignore
+    globs.forEach(aGlob => {
+      localFilePaths = localFilePaths.concat(glob.sync(aGlob.pattern, {
+        ignore: aGlob.ignore
       }))
     })
 
@@ -558,6 +571,7 @@ const releaseCmd = (cmdObj, bucketNames, lambdaFunctions, environments, bucketPa
       return confirmRelease(environment, version, packageName);
     })
     .then(answers => {
+      // noinspection JSUnresolvedVariable
       if (answers.confirmation) {
         release(environment, version, lambdaFunctions, packageName, slackConfig);
       } else {
@@ -570,13 +584,11 @@ const releaseCmd = (cmdObj, bucketNames, lambdaFunctions, environments, bucketPa
 const cleanupCmd = async (cmdObj, bucketNames, lambdaFunctions, environments, bucketPath, packageName) => {
 
   const now = new Date();
-  //const currentYear = now.getUTCFullYear();
-  //const lastYear = currentYear - 1;
-  //const oneYearAgo = new Date(Date.UTC(lastYear, now.getUTCMonth(), now.getUTCDate(), now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds()));
-  const nintyDaysAgo = new Date(now.getTime() - (1000 * 60 * 60 * 24 * 90));
+  const ninetyDaysAgo = new Date(now.getTime() - (1000 * 60 * 60 * 24 * 90));
 
 
   // This line might be too cleaver. It's getting all the server environments and then getting an array of just the unique ones.
+  // noinspection JSUnresolvedVariable
   const serverEnvironments = [...new Set(environments.map(environment => environment.serverEnvironment))];
 
   const confirmationQuestions = serverEnvironments.map(serverEnvironment => {
@@ -603,11 +615,12 @@ const cleanupCmd = async (cmdObj, bucketNames, lambdaFunctions, environments, bu
             const oldArtifacts = deployedArtifacts
               .filter(artifact => {
                 // only allow an asset to be deleted if it's older than a year
-                return artifact.lastModified.getTime() < nintyDaysAgo.getTime()
+                return artifact.lastModified.getTime() < ninetyDaysAgo.getTime()
               })
               .filter(artifact => {
                 // only allow an asset to be deleted if it's not being used in any of the environments
                 for (const releasedVersion of releasedVersions) {
+                  // noinspection JSUnresolvedVariable
                   if (releasedVersion.releasedHash === artifact.hash) {
                     return false;
                   }
@@ -630,6 +643,7 @@ const cleanupCmd = async (cmdObj, bucketNames, lambdaFunctions, environments, bu
               message: `Really delete these assets in the S3 bucket ${bucketName} with the path: ${bucketPath}?`,
               default: false
             }).then(answers => {
+              // noinspection JSUnresolvedVariable
               if (answers.reallyDelete) {
                 for (const artifact of artifactsToDelete) {
 
