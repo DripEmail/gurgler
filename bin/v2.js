@@ -50,8 +50,7 @@ const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo, pretend 
         console.log(`Only pretending to deploy ${localFilePath} to S3 bucket ${bucketName} ${remoteFilePath}`);
       } else {
         const s3 = new AWS.S3({
-          apiVersion: '2006-03-01',
-          params: {Bucket: bucketName}
+          apiVersion: '2006-03-01', params: {Bucket: bucketName}
         });
 
         // noinspection JSCheckFunctionSignatures
@@ -124,8 +123,7 @@ const determineEnvironment = (cmdObj, environments) => {
       choices: environments.map(env => {
         const label = _.padEnd(env.label, 12);
         return {
-          name: `${label} ${env.releaseHashShort}`,
-          value: env
+          name: `${label} ${env.releaseHashShort}`, value: env
         }
       })
     }]);
@@ -160,10 +158,8 @@ const getDeployedVersionList = (bucketName, bucketPath) => {
 
     const listAllVersions = (token) => {
       const opts = {
-        Bucket: bucketName,
-        // We want all gurgler.json keys, not any of the actual asset keys.
-        Delimiter: "/",
-        Prefix: bucketPath + "/",
+        Bucket: bucketName, // We want all gurgler.json keys, not any of the actual asset keys.
+        Delimiter: "/", Prefix: bucketPath + "/",
       };
 
       if (token) {
@@ -252,12 +248,7 @@ const getDeployedVersionListWithMetadata = (bucketName, bucketPath, packageName)
 const formatAndLimitDeployedVersions = (versions, size) => {
   const returnedVersions = [];
 
-  _.reverse(
-    _.sortBy(
-      versions,
-      ['lastModified']
-    )
-  )
+  _.reverse(_.sortBy(versions, ['lastModified']))
     .slice(0, size).forEach(version => {
 
     const {base, ext} = path.parse(version.filepath);
@@ -289,8 +280,7 @@ const addGitSha = async (version) => {
 
   return new Promise((resolve, reject) => {
     s3.headObject({
-      Bucket: version.bucket,
-      Key: version.filepath
+      Bucket: version.bucket, Key: version.filepath
     }, (err, data) => {
       if (err) {
         return reject(err);
@@ -354,9 +344,8 @@ const determineVersionToRelease = (cmdObj, bucketNames, environment, bucketPath,
           name: 'version',
           message: 'Which deployed version would you like to release?',
           choices: versions.map(version => {
-              return {name: version.displayName, value: version}
-            }
-          )
+            return {name: version.displayName, value: version}
+          })
         }])
       } else {
         return new Promise(((resolve) => {
@@ -396,11 +385,7 @@ const sendReleaseMessage = (environment, version, packageName, slackConfig) => {
   const simpleMessage = `\n> ${userDoingDeploy} successfully released the version ${packageName}[${version.gitSha}] to ${environment.key}\n`;
 
   if (slackConfig) {
-    const slackMessage = [
-      `*${userDoingDeploy}* successfully released a new ${packageName} version to *${environment.key}*`,
-      `_${version.displayName}_`,
-      `<${slackConfig.githubRepoUrl}/commit/${version.gitSha}|View commit on GitHub>`,
-    ].join("\n");
+    const slackMessage = [`*${userDoingDeploy}* successfully released a new ${packageName} version to *${environment.key}*`, `_${version.displayName}_`, `<${slackConfig.githubRepoUrl}/commit/${version.gitSha}|View commit on GitHub>`,].join("\n");
 
     // noinspection JSUnresolvedVariable
     const slackChannel = environment.slackChannel;
@@ -452,11 +437,8 @@ const release = (environment, version, lambdaFunctions, packageName, slackConfig
 
   // noinspection JSUnresolvedVariable
   const params = {
-    FunctionName: functionName,
-    InvocationType: "RequestResponse",
-    Payload: JSON.stringify({
-      parameterName: environment.ssmKey,
-      parameterValue: version.hash,
+    FunctionName: functionName, InvocationType: "RequestResponse", Payload: JSON.stringify({
+      parameterName: environment.ssmKey, parameterValue: version.hash,
     })
   }
 
@@ -482,11 +464,7 @@ const confirmRelease = (environment, version, packageName) => {
     default: false
   }]).then(answers => {
     // noinspection JSUnresolvedVariable
-    if (
-      answers.confirmation &&
-      environment.masterOnly &&
-      version.gitBranch !== 'master'
-    ) {
+    if (answers.confirmation && environment.masterOnly && version.gitBranch !== 'master') {
       // noinspection JSUnresolvedVariable
       return inquirer.prompt([{
         type: 'confirm',
@@ -507,11 +485,7 @@ const configureCmd = (gurglerPath, bucketPath, commit, branch) => {
   const prefix = bucketPath + "/" + hashed
 
   const data = JSON.stringify({
-    commit,
-    branch,
-    raw,
-    hash: hashed,
-    prefix,
+    commit, branch, raw, hash: hashed, prefix,
   }, null, 2);
 
   fs.writeFile(gurglerPath, data, err => {
@@ -529,7 +503,7 @@ const configureCmd = (gurglerPath, bucketPath, commit, branch) => {
  * @param globs
  * @param pretend {boolean}
  */
-const deployCmd = (bucketNames, gurglerPath, globs, pretend= false) => {
+const deployCmd = (bucketNames, gurglerPath, globs, pretend = false) => {
   fs.readFile(gurglerPath, 'utf-8', (err, data) => {
     if (err) {
       if (err.code === 'ENOENT') {
@@ -631,54 +605,53 @@ const cleanupCmd = async (cmdObj, bucketNames, lambdaFunctions, environments, bu
 
             return oldArtifacts;
           })
-        })
+        }).then(artifactsToDelete => {
 
-          .then(artifactsToDelete => {
-            for (const artifact of artifactsToDelete) {
-              console.log(artifact.displayName);
-            }
-            inquirer.prompt({
-              type: 'confirm',
-              name: "reallyDelete",
-              message: `Really delete these assets in the S3 bucket ${bucketName} with the path: ${bucketPath}?`,
-              default: false
-            }).then(answers => {
-              // noinspection JSUnresolvedVariable
-              if (answers.reallyDelete) {
-                for (const artifact of artifactsToDelete) {
+          if (artifactsToDelete.length < 1) {
+            console.log("Nothing to delete.")
+          }
 
-                  console.log("Deleting", artifact.hash);
+          for (const artifact of artifactsToDelete) {
+            console.log(artifact.displayName);
+          }
+          inquirer.prompt({
+            type: 'confirm',
+            name: "reallyDelete",
+            message: `Really delete these assets in the S3 bucket ${bucketName} with the path: ${bucketPath}?`,
+            default: false
+          }).then(answers => {
+            // noinspection JSUnresolvedVariable
+            if (answers.reallyDelete) {
+              for (const artifact of artifactsToDelete) {
 
-                  const s3 = new AWS.S3({
-                    apiVersion: '2006-03-01'
-                  });
+                console.log("Deleting", artifact.hash);
 
-                  emptyS3Directory(s3, bucketName, artifact.directoryPath);
+                const s3 = new AWS.S3({
+                  apiVersion: '2006-03-01'
+                });
 
-                  const paramsOfObjectsToDelete = {
-                    Bucket: bucketName,
-                    Delete: {
-                      Objects: [
-                        {
-                          Key: artifact.filepath
-                        },
-                        {
-                          Key: artifact.directoryPath
-                        }
-                      ],
-                    }
-                  };
+                emptyS3Directory(s3, bucketName, artifact.directoryPath);
 
-                  s3.deleteObjects(paramsOfObjectsToDelete, function(err, data) {
-                    if (err) console.error(err, err.stack); // an error occurred
-                    else     console.log(data);           // successful response
-                  });
-                }
-                console.log("Deleted.")
-              } else {
-                console.log("Very well, not deleting anything then.")
+                const paramsOfObjectsToDelete = {
+                  Bucket: bucketName, Delete: {
+                    Objects: [{
+                      Key: artifact.filepath
+                    }, {
+                      Key: artifact.directoryPath
+                    }],
+                  }
+                };
+
+                s3.deleteObjects(paramsOfObjectsToDelete, function (err, data) {
+                  if (err) console.error(err, err.stack); // an error occurred
+                  else console.log(data);           // successful response
+                });
               }
-            })
+              console.log("Deleted.")
+            } else {
+              console.log("Very well, not deleting anything then.")
+            }
+          })
 
         })
       }
@@ -688,8 +661,5 @@ const cleanupCmd = async (cmdObj, bucketNames, lambdaFunctions, environments, bu
 
 
 module.exports = {
-  configureCmd,
-  deployCmd,
-  releaseCmd,
-  cleanupCmd
+  configureCmd, deployCmd, releaseCmd, cleanupCmd
 }
