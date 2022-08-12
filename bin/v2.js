@@ -556,7 +556,6 @@ const releaseCmd = (cmdObj, bucketNames, lambdaFunctions, environments, bucketPa
 }
 
 const cleanupCmd = async (cmdObj, bucketNames, lambdaFunctions, environments, bucketPath, packageName) => {
-
   const now = new Date();
   const ninetyDaysAgo = new Date(now.getTime() - (1000 * 60 * 60 * 24 * 90));
 
