@@ -255,7 +255,7 @@ const formatAndLimitDeployedVersions = (versions, size) => {
     const split = base.split(".");
 
     // This check is strictly not necessary assuming getDeployedVersionList only returns versions
-    //  matching these criteria.
+    // matching these criteria.
     if (ext === ".json" && split[1] === "gurgler") {
       version.hash = split[0];
       version.hashDigest = makeHashDigest(version.hash);
