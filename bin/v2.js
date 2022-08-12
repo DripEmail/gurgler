@@ -650,7 +650,6 @@ const cleanupCmd = async (cmdObj, bucketNames, lambdaFunctions, environments, bu
               console.log("Very well, not deleting anything then.")
             }
           })
-
         })
       }
     });
