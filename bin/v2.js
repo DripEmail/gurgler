@@ -561,7 +561,7 @@ const cleanupCmd = async (cmdObj, bucketNames, lambdaFunctions, environments, bu
   const ninetyDaysAgo = new Date(now.getTime() - (1000 * 60 * 60 * 24 * 90));
 
 
-  // This line might be too cleaver. It's getting all the server environments and then getting an array of just the unique ones.
+  // This line might be too clever. It's getting all the server environments and then getting an array of just the unique ones.
   // noinspection JSUnresolvedVariable
   const serverEnvironments = [...new Set(environments.map(environment => environment.serverEnvironment))];
 
