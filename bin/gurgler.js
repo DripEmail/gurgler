@@ -200,7 +200,7 @@ program
 
 program
   .command("delete-old-deploys")
-  .description("delete artifacts from S3 that are older than a year and not being used")
+  .description("delete artifacts from S3 that are older than 90 days and not being used")
 
   .action((cmdObj) => {
     v2.cleanupCmd(
