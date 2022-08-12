@@ -601,7 +601,7 @@ const cleanupCmd = async (cmdObj, bucketNames, lambdaFunctions, environments, bu
                 }
                 return true;
               })
-            console.log(`We are going to delete ${oldArtifacts.length} ${packageName} artifacts in ${serverEnvironment}`);
+            console.log(`We are going to delete ${oldArtifacts.length} ${packageName} artifact(s) in ${serverEnvironment}`);
 
             return oldArtifacts;
           })
