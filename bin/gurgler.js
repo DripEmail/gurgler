@@ -1,12 +1,14 @@
 #! /usr/bin/env node
-const AWS = require("aws-sdk");
-const { Command } = require("commander");
-const path = require("path");
-const _ = require("lodash");
 
-const v2 = require("./v2");
+import v2 from "./v2";
+import _ from "lodash";
+import * as AWS from "aws-sdk";
+import {join} from "path";
+import {Command} from "commander";
+
 
 const program = new Command();
+
 
 /**
  * *******************
@@ -15,8 +17,8 @@ const program = new Command();
  */
 
 // TODO There"s got to be a better way to get the path for this.
-const gurglerPath = path.join(process.env.PWD, "gurgler.json")
-const packageValues = require(path.join(process.env.PWD, "package.json"));
+const gurglerPath = join(process.env.PWD, "gurgler.json")
+const packageValues = require(join(process.env.PWD, "package.json"));
 const packageName = packageValues["name"];
 const gurglerConfig = packageValues["gurgler"];
 const environments = gurglerConfig["environments"];

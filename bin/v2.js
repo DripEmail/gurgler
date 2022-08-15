@@ -1,14 +1,16 @@
-const fs = require('fs');
-const AWS = require('aws-sdk');
-const inquirer = require('inquirer');
-const path = require('path');
-const _ = require('lodash');
-const crypto = require('crypto');
-const {IncomingWebhook} = require('@slack/webhook');
-const glob = require("glob");
-const utils = require("./utils");
-const {getGitInfo} = require("./git");
-const {emptyS3Directory, makeHashDigest} = require("./utils");
+import inquirer from 'inquirer';
+import {readFile} from "fs";
+import {join, parse} from "path";
+import utils, {emptyS3Directory, getContentType, makeHashDigest} from "./utils";
+import {filter, find, forEach, get, has, isEmpty, padEnd, reverse, sortBy, startsWith, truncate} from "lodash";
+import * as AWS from "aws-sdk";
+import {getGitInfo} from "./git";
+import {IncomingWebhook} from "@slack/webhook";
+import glob from "glob";
+import {createHash} from "crypto";
+import {writeFile} from "fs"
+
+
 
 /**
  * Send the file to S3. All files except gurgler.json are considered assets and will be prefixed with
@@ -29,23 +31,23 @@ const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo, pretend 
 
   // TODO send source maps to Honeybadger (but maybe just the ones we deploy)
 
-  fs.readFile(localFilePath, (err, data) => {
+  readFile(localFilePath, (err, data) => {
     if (err) {
       throw err;
     }
 
-    const {base, ext} = path.parse(localFilePath);
-    const contentType = utils.getContentType(ext);
+    const {base, ext} = parse(localFilePath);
+    const contentType = getContentType(ext);
 
     let remoteFilePath;
     if (base === "gurgler.json") {
       // prefix.gurgler.json is a sibling to the prefix under which all the assets are keyed.
       remoteFilePath = `${prefix}.${base}`
     } else {
-      remoteFilePath = path.join(prefix, base);
+      remoteFilePath = join(prefix, base);
     }
 
-    _.forEach(bucketNames, (bucketName) => {
+    forEach(bucketNames, (bucketName) => {
       if (pretend) {
         console.log(`Only pretending to deploy ${localFilePath} to S3 bucket ${bucketName} ${remoteFilePath}`);
       } else {
@@ -100,11 +102,11 @@ const requestCurrentlyReleasedVersions = (environments) => {
 
       const environmentsWithReleaseData = environments.map(env => {
         // noinspection JSUnresolvedVariable
-        const value = _.find(data.Parameters, v => env.ssmKey === v.Name);
+        const value = find(data.Parameters, v => env.ssmKey === v.Name);
 
-        env.releasedHash = _.get(value, "Value", "Unreleased!");
+        env.releasedHash = get(value, "Value", "Unreleased!");
         env.releaseHashShort = env.releasedHash === "Unreleased!" ? "Unreleased!" : utils.makeHashDigest(env.releasedHash)
-        env.releaseDateStr = _.get(value, "LastModifiedDate");
+        env.releaseDateStr = get(value, "LastModifiedDate");
 
         return env;
       });
@@ -115,13 +117,13 @@ const requestCurrentlyReleasedVersions = (environments) => {
 };
 
 const determineEnvironment = (cmdObj, environments) => {
-  if (_.isEmpty(cmdObj.environment)) {
+  if (isEmpty(cmdObj.environment)) {
     return inquirer.prompt([{
       type: 'list',
       name: 'environment',
       message: 'Which environment will receive this release?',
       choices: environments.map(env => {
-        const label = _.padEnd(env.label, 12);
+        const label = padEnd(env.label, 12);
         return {
           name: `${label} ${env.releaseHashShort}`, value: env
         }
@@ -129,10 +131,10 @@ const determineEnvironment = (cmdObj, environments) => {
     }]);
   } else {
     return new Promise(((resolve) => {
-      const environment = _.find(environments, e => e.key === cmdObj.environment);
+      const environment = find(environments, e => e.key === cmdObj.environment);
       if (!environment) {
         const keys = environments.map(e => e.key);
-        const keysStr = _.join(keys, ", ");
+        const keysStr = join(keys, ", ");
         console.error(`"${cmdObj.environment}" does not appear to be a valid environment. The choices are: ${keysStr}`);
         process.exit(1);
       }
@@ -174,8 +176,8 @@ const getDeployedVersionList = (bucketName, bucketPath) => {
         const concatenated = allVersions.concat(data.Contents);
 
         // Make sure we're only ever pulling our gurgler.json manifest files.
-        allVersions = _.filter(concatenated, version => {
-          const {base, ext} = path.parse(version.Key);
+        allVersions = filter(concatenated, version => {
+          const {base, ext} = parse(version.Key);
           return (ext === ".json" && base.split(".")[1] === "gurgler");
         })
 
@@ -202,7 +204,7 @@ const getDeployedVersionListWithMetadata = (bucketName, bucketPath, packageName)
   const filterFilesToFindGurglerDeploys = async (versions) => {
     let artifacts = [];
     for (const version of versions) {
-      const {base, ext} = path.parse(version.filepath);
+      const {base, ext} = parse(version.filepath);
       const split = base.split(".");
 
       if (ext === ".json" && split[1] === "gurgler") {
@@ -226,7 +228,7 @@ const getDeployedVersionListWithMetadata = (bucketName, bucketPath, packageName)
 
   return getDeployedVersionList(bucketName, bucketPath)
     .then(versions => {
-      return _.sortBy(versions, ['lastModified'])
+      return sortBy(versions, ['lastModified'])
     })
     .then(filterFilesToFindGurglerDeploys)
     .then(versions => {
@@ -248,10 +250,10 @@ const getDeployedVersionListWithMetadata = (bucketName, bucketPath, packageName)
 const formatAndLimitDeployedVersions = (versions, size) => {
   const returnedVersions = [];
 
-  _.reverse(_.sortBy(versions, ['lastModified']))
+  reverse(sortBy(versions, ['lastModified']))
     .slice(0, size).forEach(version => {
 
-    const {base, ext} = path.parse(version.filepath);
+    const {base, ext} = parse(version.filepath);
     const split = base.split(".");
 
     // This check is strictly not necessary assuming getDeployedVersionList only returns versions
@@ -307,8 +309,8 @@ const addGitInfo = async (version, packageName) => {
   const commitDateStr = gitInfo.get("date").padEnd(16);
   const hashShort = utils.makeHashDigest(version.hash);
   const gitShaShort = utils.makeHashDigest(gitSha);
-  const gitBranch = _.isEmpty(version.gitBranch) ? "" : _.truncate(version.gitBranch, {length: 15});
-  const gitMessage = _.truncate(gitInfo.get("message"), {length: 30}).replace(/(\r\n|\n|\r)/gm, '');
+  const gitBranch = isEmpty(version.gitBranch) ? "" : truncate(version.gitBranch, {length: 15});
+  const gitMessage = truncate(gitInfo.get("message"), {length: 30}).replace(/(\r\n|\n|\r)/gm, '');
   version.displayName = `${commitDateStr} | ${packageName}[${hashShort}] | ${author} | git[${gitShaShort}] | [${gitBranch}] ${gitMessage}`;
 
   return version;
@@ -316,7 +318,7 @@ const addGitInfo = async (version, packageName) => {
 
 const determineVersionToRelease = (cmdObj, bucketNames, environment, bucketPath, packageName) => {
   // noinspection JSUnresolvedVariable
-  const bucketName = _.get(bucketNames, environment.serverEnvironment);
+  const bucketName = get(bucketNames, environment.serverEnvironment);
   if (!bucketName) {
     // noinspection JSUnresolvedVariable
     console.error(`The server environment ${environment.serverEnvironment} does not exist.`)
@@ -338,7 +340,7 @@ const determineVersionToRelease = (cmdObj, bucketNames, environment, bucketPath,
         console.log("\n> There are no currently deployed versions. Run 'gurgler configure <gitCommitSha> <gitBranch>' and `gurgler deploy` and try again.\n");
         process.exit(0);
       }
-      if (_.isEmpty(cmdObj.commit)) {
+      if (isEmpty(cmdObj.commit)) {
         return inquirer.prompt([{
           type: 'list',
           name: 'version',
@@ -354,8 +356,8 @@ const determineVersionToRelease = (cmdObj, bucketNames, environment, bucketPath,
             process.exit(1);
           }
 
-          const version = _.find(versions, version => {
-            return _.startsWith(version.gitSha, cmdObj.commit)
+          const version = find(versions, version => {
+            return startsWith(version.gitSha, cmdObj.commit)
           });
 
           // TODO If we do not find it in this list of assets, check older assets too.
@@ -390,7 +392,7 @@ const sendReleaseMessage = (environment, version, packageName, slackConfig) => {
     // noinspection JSUnresolvedVariable
     const slackChannel = environment.slackChannel;
 
-    if (!_.isEmpty(slackConfig.slackWebHookUrl) && !_.isEmpty(slackChannel)) {
+    if (!isEmpty(slackConfig.slackWebHookUrl) && !isEmpty(slackChannel)) {
       const webhook = new IncomingWebhook(slackConfig.slackWebHookUrl);
 
       (async () => {
@@ -422,12 +424,12 @@ const release = (environment, version, lambdaFunctions, packageName, slackConfig
     apiVersion: '2015-03-31'
   });
 
-  if (!_.has(environment, 'serverEnvironment')) {
+  if (!has(environment, 'serverEnvironment')) {
     throw new Error(`The server environment for this environment is not set: ${environment.key}`);
   }
 
   // noinspection JSUnresolvedVariable
-  if (!_.has(lambdaFunctions, environment.serverEnvironment)) {
+  if (!has(lambdaFunctions, environment.serverEnvironment)) {
     // noinspection JSUnresolvedVariable
     throw new Error(`the lambda function for the following environment is not set: ${environment.serverEnvironment}`);
   }
@@ -477,7 +479,7 @@ const confirmRelease = (environment, version, packageName) => {
 };
 
 const configureCmd = (gurglerPath, bucketPath, commit, branch) => {
-  const hash = crypto.createHash('sha256');
+  const hash = createHash('sha256');
   const raw = `${commit}|${branch}`;
 
   hash.update(raw);
@@ -488,7 +490,7 @@ const configureCmd = (gurglerPath, bucketPath, commit, branch) => {
     commit, branch, raw, hash: hashed, prefix,
   }, null, 2);
 
-  fs.writeFile(gurglerPath, data, err => {
+  writeFile(gurglerPath, data, err => {
     if (err) {
       throw err
     }
@@ -504,7 +506,7 @@ const configureCmd = (gurglerPath, bucketPath, commit, branch) => {
  * @param pretend {boolean}
  */
 const deployCmd = (bucketNames, gurglerPath, globs, pretend = false) => {
-  fs.readFile(gurglerPath, 'utf-8', (err, data) => {
+  readFile(gurglerPath, 'utf-8', (err, data) => {
     if (err) {
       if (err.code === 'ENOENT') {
         console.log("Either gurgler.json has not been built or it has been removed. Run 'gurgler configure <git commit sha> <git branch>' and try again.");
@@ -564,7 +566,7 @@ const cleanupCmd = async (cmdObj, bucketNames, lambdaFunctions, environments, bu
   const serverEnvironments = [...new Set(environments.map(environment => environment.serverEnvironment))];
 
   const confirmationQuestions = serverEnvironments.map(serverEnvironment => {
-    const bucketName = _.get(bucketNames, serverEnvironment);
+    const bucketName = get(bucketNames, serverEnvironment);
     return {
       type: 'confirm',
       name: serverEnvironment,
@@ -576,7 +578,7 @@ const cleanupCmd = async (cmdObj, bucketNames, lambdaFunctions, environments, bu
   inquirer.prompt(confirmationQuestions).then(answers => {
     serverEnvironments.map(serverEnvironment => {
       if (answers[serverEnvironment]) {
-        const bucketName = _.get(bucketNames, serverEnvironment);
+        const bucketName = get(bucketNames, serverEnvironment);
         console.log(`Cleaning up gurgler assets in the S3 bucket ${bucketName} with the path: ${bucketPath} `);
 
         requestCurrentlyReleasedVersions(environments).then(releasedVersions => {
