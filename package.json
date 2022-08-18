@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@slack/webhook": "6.1.0",
-    "aws-sdk": "2.1190.0",
+    "aws-sdk": "2.1198.0",
     "commander": "9.4.0",
     "crypto-js": "4.1.1",
     "dotenv": "16.0.1",
@@ -23,7 +23,7 @@
     "request": "2.88.2"
   },
   "devDependencies": {
-    "eslint": "^8.21.0",
+    "eslint": "^8.22.0",
     "eslint-config-prettier": "^8.5.0",
     "eslint-plugin-prettier": "^4.2.1",
     "prettier": "^2.7.1"
