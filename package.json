@@ -1,6 +1,7 @@
 {
   "name": "gurgler",
   "version": "3.0.1",
+  "type": "module",
   "description": "A deployment tool.",
   "main": "gurgler.js",
   "repository": "git@github.com:DripEmail/gurgler.git",
@@ -8,7 +9,7 @@
   "license": "MIT",
   "private": false,
   "bin": {
-    "gurgler": "./bin/gurgler.js"
+    "gurgler": "bin/gurgler.js"
   },
   "dependencies": {
     "@slack/webhook": "6.1.0",

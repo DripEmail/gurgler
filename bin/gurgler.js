@@ -1,9 +1,10 @@
 #! /usr/bin/env node
 
-import v2 from "./v2";
+import {configureCmd, deployCmd, releaseCmd, cleanupCmd} from "./v2.mjs";
 import _ from "lodash";
-import * as AWS from "aws-sdk";
+import AWS from 'aws-sdk';
 import {join} from "path";
+import {readFileSync} from "fs";
 import {Command} from "commander";
 
 
@@ -16,11 +17,16 @@ const program = new Command();
  * *******************
  */
 
+
+const packagePath = join(process.env.PWD, "package.json");
+let rawPackageData = readFileSync(packagePath);
+let packageData = JSON.parse(rawPackageData);
+
 // TODO There"s got to be a better way to get the path for this.
 const gurglerPath = join(process.env.PWD, "gurgler.json")
-const packageValues = require(join(process.env.PWD, "package.json"));
-const packageName = packageValues["name"];
-const gurglerConfig = packageValues["gurgler"];
+
+const packageName = packageData["name"];
+const gurglerConfig = packageData["gurgler"];
 const environments = gurglerConfig["environments"];
 const bucketNames = gurglerConfig["bucketNames"];
 const lambdaFunctions = gurglerConfig["lambdaFunctions"];
@@ -158,7 +164,7 @@ program
   .description("configures a gurgler.json in the project root to be referenced in the build and deploy process")
   .action((commit, branch) => {
     validateGlobs();
-    v2.configureCmd(
+    configureCmd(
       gurglerPath,
       bucketPath,
       commit,
@@ -172,7 +178,7 @@ program
   .option("-p --pretend", "Do not actually send the files")
   .action((gitCommitSha, gitBranch, options) => {
       validateGlobs();
-      v2.deployCmd(
+      deployCmd(
         bucketNames,
         gurglerPath,
         globs,
@@ -187,7 +193,7 @@ program
   .option("-c, --commit <gitSha>", "the git sha (commit) of the version to deploy")
 
   .action((cmdObj) => {
-    v2.releaseCmd(
+    releaseCmd(
       cmdObj,
       bucketNames,
       lambdaFunctions,
@@ -205,7 +211,7 @@ program
   .description("delete artifacts from S3 that are older than 90 days and not being used")
 
   .action((cmdObj) => {
-    v2.cleanupCmd(
+    cleanupCmd(
       cmdObj,
       bucketNames,
       lambdaFunctions,

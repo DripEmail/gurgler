@@ -120,6 +120,6 @@ const getGitInfo = async (gitSha) => {
     });
 }
 
-module.exports = {
+export {
   getGitInfo
 };
