@@ -1,4 +1,4 @@
-const {exec} = require('child_process');
+import {exec}  from 'child_process';
 
 /**
  * @param gitSha
@@ -120,6 +120,6 @@ const getGitInfo = async (gitSha) => {
     });
 }
 
-module.exports = {
+export {
   getGitInfo
 };

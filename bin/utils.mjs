@@ -46,7 +46,7 @@ async function emptyS3Directory(s3, bucket, dir) {
   if (listedObjects.IsTruncated) await emptyS3Directory(bucket, dir);
 }
 
-module.exports = {
+export {
   makeHashDigest,
   getContentType,
   emptyS3Directory
