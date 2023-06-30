@@ -6,7 +6,7 @@ import _ from "lodash";
 import AWS from "aws-sdk";
 import {getGitInfo} from "./git.mjs";
 import {IncomingWebhook} from "@slack/webhook";
-import glob from "glob";
+import { glob } from "glob";
 import {createHash} from "crypto";
 import {writeFile} from "fs"
 import * as utils from "./utils.mjs";
