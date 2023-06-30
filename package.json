@@ -12,10 +12,10 @@
     "gurgler": "bin/gurgler.js"
   },
   "dependencies": {
+    "@aws-sdk/client-lambda": "^3.363.0",
     "@aws-sdk/client-s3": "^3.363.0",
     "@aws-sdk/client-ssm": "^3.363.0",
     "@slack/webhook": "6.1.0",
-    "aws-sdk": "2.1408.0",
     "commander": "11.0.0",
     "crypto-js": "4.1.1",
     "dotenv": "16.3.1",

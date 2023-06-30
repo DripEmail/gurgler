@@ -3,9 +3,9 @@ import {readFile} from "fs";
 import {join, parse} from "path";
 import {emptyS3Directory, getContentType, makeHashDigest} from "./utils.mjs";
 import _ from "lodash";
-import AWS from "aws-sdk";
 import { SSMClient, GetParametersCommand } from "@aws-sdk/client-ssm";
-import { S3Client, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { S3Client, ListObjectsV2Command, HeadObjectCommand, DeleteObjectsCommand} from "@aws-sdk/client-s3";
+import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import {getGitInfo} from "./git.mjs";
 import {IncomingWebhook} from "@slack/webhook";
 import { glob } from "glob";
@@ -269,28 +269,26 @@ const formatAndLimitDeployedVersions = (versions, size) => {
  */
 
 const addGitSha = async (version) => {
-  const s3 = new AWS.S3({
-    apiVersion: '2006-03-01'
-  });
+  const client = new S3Client();
+  const input = {
+    Bucket: version.bucket,
+    Key: version.filepath
+  };
+  const command = new HeadObjectCommand(input);
 
-  return new Promise((resolve, reject) => {
-    s3.headObject({
-      Bucket: version.bucket, Key: version.filepath
-    }, (err, data) => {
-      if (err) {
-        return reject(err);
-      }
+  const response = await client.send(command);
 
-      const metaData = data.Metadata['git-info'];
-      if (metaData !== '' && metaData !== undefined) {
-        const parsedMetaData = metaData.split('|');
-        version.gitSha = parsedMetaData[0];
-        version.gitShaDigest = makeHashDigest(parsedMetaData[0]);
-        version.gitBranch = parsedMetaData[1];
-      }
-      return resolve(version);
-    });
-  });
+  const metaData = response.Metadata['git-info'];
+  if (metaData !== '' && metaData !== undefined) {
+    const parsedMetaData = metaData.split('|');
+    version.gitSha = parsedMetaData[0];
+    version.gitShaDigest = makeHashDigest(parsedMetaData[0]);
+    version.gitBranch = parsedMetaData[1];
+  }
+
+  console.log("version", version);
+
+  return version;
 };
 
 const addGitInfo = async (version, packageName) => {
@@ -412,11 +410,7 @@ const sendReleaseMessage = (environment, version, packageName, slackConfig) => {
  * @param {object} slackConfig
  */
 
-const release = (environment, version, lambdaFunctions, packageName, slackConfig) => {
-  const lambda = new AWS.Lambda({
-    apiVersion: '2015-03-31'
-  });
-
+const release = async (environment, version, lambdaFunctions, packageName, slackConfig) => {
   if (!_.has(environment, 'serverEnvironment')) {
     throw new Error(`The server environment for this environment is not set: ${environment.key}`);
   }
@@ -430,25 +424,22 @@ const release = (environment, version, lambdaFunctions, packageName, slackConfig
   // noinspection JSUnresolvedVariable
   const functionName = lambdaFunctions[environment.serverEnvironment];
 
-  // noinspection JSUnresolvedVariable
-  const params = {
-    FunctionName: functionName, InvocationType: "RequestResponse", Payload: JSON.stringify({
-      parameterName: environment.ssmKey, parameterValue: version.hash,
-    })
-  }
+  const client = new LambdaClient();
+  const input = {
+      FunctionName: functionName, InvocationType: "RequestResponse", Payload: JSON.stringify({
+        parameterName: environment.ssmKey, parameterValue: version.hash,
+      })
+    };
+  const command = new InvokeCommand(input);
+  const response = await client.send(command);
 
-  lambda.invoke(params, (err, data) => {
-    if (err) {
-      throw err;
-    }
-    if (data.StatusCode !== 200) {
-      throw new Error(`unsuccessful lambda invocation; unable to release asset version; got status ${data.StatusCode}`);
-    }
-    if (data.FunctionError) {
-      throw new Error(`one or more parameter store values could not be updated: ${data.Payload}`);
-    }
-    sendReleaseMessage(environment, version, packageName, slackConfig);
-  });
+  if (response.StatusCode !== 200) {
+    throw new Error(`unsuccessful lambda invocation; unable to release asset version; got status ${response.StatusCode}`);
+  }
+  if (response.FunctionError) {
+    throw new Error(`one or more parameter store values could not be updated: ${response.Payload}`);
+  }
+  sendReleaseMessage(environment, version, packageName, slackConfig);
 };
 
 const confirmRelease = (environment, version, packageName) => {
@@ -612,20 +603,18 @@ const cleanupCmd = async (cmdObj, bucketNames, lambdaFunctions, environments, bu
             name: "reallyDelete",
             message: `Really delete these assets in the S3 bucket ${bucketName} with the path: ${bucketPath}?`,
             default: false
-          }).then(answers => {
+          }).then(async (answers) => {
             // noinspection JSUnresolvedVariable
             if (answers.reallyDelete) {
               for (const artifact of artifactsToDelete) {
 
                 console.log("Deleting", artifact.hash);
 
-                const s3 = new AWS.S3({
-                  apiVersion: '2006-03-01'
-                });
+                const client = new S3Client();
 
-                emptyS3Directory(s3, bucketName, artifact.directoryPath);
+                emptyS3Directory(client, bucketName, artifact.directoryPath);
 
-                const paramsOfObjectsToDelete = {
+                const input = {
                   Bucket: bucketName, Delete: {
                     Objects: [{
                       Key: artifact.filepath
@@ -635,10 +624,8 @@ const cleanupCmd = async (cmdObj, bucketNames, lambdaFunctions, environments, bu
                   }
                 };
 
-                s3.deleteObjects(paramsOfObjectsToDelete, function (err, data) {
-                  if (err) console.error(err, err.stack); // an error occurred
-                  else console.log(data);           // successful response
-                });
+                const command = new DeleteObjectsCommand(input);
+                await client.send(command);
               }
               console.log("Deleted.")
             } else {
