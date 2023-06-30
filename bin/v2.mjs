@@ -4,6 +4,7 @@ import {join, parse} from "path";
 import {emptyS3Directory, getContentType, makeHashDigest} from "./utils.mjs";
 import _ from "lodash";
 import AWS from "aws-sdk";
+import { SSMClient, GetParametersCommand } from "@aws-sdk/client-ssm";
 import {getGitInfo} from "./git.mjs";
 import {IncomingWebhook} from "@slack/webhook";
 import { glob } from "glob";
@@ -82,39 +83,38 @@ const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo, pretend 
  * @returns {Promise<[{object}]>}
  */
 
-const requestCurrentlyReleasedVersions = (environments) => {
+const requestCurrentlyReleasedVersions = async (environments) => {
 
   // noinspection JSUnresolvedVariable
   const ssmKeys = environments.map(env => env.ssmKey);
 
-  const ssm = new AWS.SSM({
-    apiVersion: '2014-11-06'
-  });
+  const ssmClient = new SSMClient();
 
   const params = {
     Names: ssmKeys
   };
 
-  return new Promise((resolve, reject) => {
-    ssm.getParameters(params, (err, data) => {
-      if (err) {
-        return reject(err);
-      }
+  // Get data about what's currently released for each enviornment.
+  const command = new GetParametersCommand(params);
+  const response = await ssmClient.send(command);
 
-      const environmentsWithReleaseData = environments.map(env => {
-        // noinspection JSUnresolvedVariable
-        const value = _.find(data.Parameters, v => env.ssmKey === v.Name);
+  const environmentsWithReleaseData = environments.map(environment => {
 
-        env.releasedHash = _.get(value, "Value", "Unreleased!");
-        env.releaseHashShort = env.releasedHash === "Unreleased!" ? "Unreleased!" : utils.makeHashDigest(env.releasedHash)
-        env.releaseDateStr = _.get(value, "LastModifiedDate");
+    const param = response.Parameters.find(param => param.Name === environment.ssmKey);
 
-        return env;
-      });
+    const { Value: releasedHash = "Unreleased!", LastModifiedDate: releaseDate } = param;
 
-      return resolve(environmentsWithReleaseData);
-    });
+    // Fold in the data from SSM into the environment.
+    const releaseDateShort = releasedHash === "Unreleased!" ? "Unreleased!" : utils.makeHashDigest(releasedHash)
+    environment.releasedHash = releasedHash;
+    environment.releaseHashShort = releaseDateShort;
+    environment.releaseDate = releaseDate;
+    environment.releaseDateStr = releaseDate.toDateString();
+
+    return environment;
   });
+
+  return environmentsWithReleaseData;
 };
 
 const determineEnvironment = (cmdObj, environments) => {
