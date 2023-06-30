@@ -5,6 +5,7 @@ import {emptyS3Directory, getContentType, makeHashDigest} from "./utils.mjs";
 import _ from "lodash";
 import AWS from "aws-sdk";
 import { SSMClient, GetParametersCommand } from "@aws-sdk/client-ssm";
+import { S3Client, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import {getGitInfo} from "./git.mjs";
 import {IncomingWebhook} from "@slack/webhook";
 import { glob } from "glob";
@@ -151,52 +152,43 @@ const determineEnvironment = (cmdObj, environments) => {
  * @returns {Promise<[{object}]>}
  */
 
-const getDeployedVersionList = (bucketName, bucketPath) => {
-  const s3 = new AWS.S3({
-    apiVersion: '2006-03-01'
-  });
+const getDeployedVersionList = async (bucketName, bucketPath) => {
+  const client = new S3Client();
 
-  return new Promise((resolve, reject) => {
-    let allVersions = [];
-
-    const listAllVersions = (token) => {
-      const opts = {
+   const input = {
         Bucket: bucketName, // We want all gurgler.json keys, not any of the actual asset keys.
         Delimiter: "/", Prefix: bucketPath + "/",
       };
 
-      if (token) {
-        opts.ContinuationToken = token;
-      }
+  let allVersions = [];
 
-      s3.listObjectsV2(opts, (err, data) => {
-        if (err) {
-          reject()
-        }
+  // Get the first batch.
+  const command = new ListObjectsV2Command(input);
+  const response = await client.send(command);
+  allVersions = allVersions.concat(response.Contents);
 
-        const concatenated = allVersions.concat(data.Contents);
+  while(response.IsTruncated) {
+    // If there's more get those too
+    input.ContinuationToken = response.NextContinuationToken;
+    const command = new ListObjectsV2Command(input);
+    const response = await client.send(command);
 
-        // Make sure we're only ever pulling our gurgler.json manifest files.
-        allVersions = _.filter(concatenated, version => {
-          const {base, ext} = parse(version.Key);
-          return (ext === ".json" && base.split(".")[1] === "gurgler");
-        })
+    let allVersions = allVersions.concat(response.Contents);
+  }
 
-        if (data.IsTruncated) {
-          listAllVersions(data.NextContinuationToken);
-        } else {
-          resolve(allVersions.map(version => {
-            return {
-              filepath: version.Key,
-              directoryPath: version.Key.split(".gurgler.json")[0],
-              lastModified: version.LastModified,
-              bucket: bucketName,
-            }
-          }));
-        }
-      });
-    };
-    listAllVersions();
+  // Make sure we're only ever pulling our gurgler.json manifest files.
+  allVersions = allVersions.filter(version => {
+  const {base, ext} = parse(version.Key);
+    return (ext === ".json" && base.split(".")[1] === "gurgler");
+  })
+
+  return allVersions.map(version => {
+    return {
+      filepath: version.Key,
+      directoryPath: version.Key.split(".gurgler.json")[0],
+      lastModified: version.LastModified,
+      bucket: bucketName,
+    }
   });
 };
 
