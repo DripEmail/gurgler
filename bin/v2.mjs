@@ -286,8 +286,6 @@ const addGitSha = async (version) => {
     version.gitBranch = parsedMetaData[1];
   }
 
-  console.log("version", version);
-
   return version;
 };
 
