@@ -3,7 +3,9 @@ import {readFile} from "fs";
 import {join, parse} from "path";
 import {emptyS3Directory, getContentType, makeHashDigest} from "./utils.mjs";
 import _ from "lodash";
-import AWS from "aws-sdk";
+import { SSMClient, GetParametersCommand } from "@aws-sdk/client-ssm";
+import { S3Client, ListObjectsV2Command, HeadObjectCommand, DeleteObjectsCommand} from "@aws-sdk/client-s3";
+import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import {getGitInfo} from "./git.mjs";
 import {IncomingWebhook} from "@slack/webhook";
 import { glob } from "glob";
@@ -15,7 +17,7 @@ import * as utils from "./utils.mjs";
 
 /**
  * Send the file to S3. All files except gurgler.json are considered assets and will be prefixed with
- * the appropriate value. If there are more than 1 hierarchies to the prefix, gurgler.json will maintain
+ * the appropriate value. If there are more than 1 hierarchy to the prefix, gurgler.json will maintain
  * all prefixes save the last, to which it will be appended. For example, a prefix of assets/asdsf will
  * result in all assets being stored within that prefix but gurgler.json will become assets/asdf.gurgler.json.
  *
@@ -82,39 +84,38 @@ const readFileAndDeploy = (bucketNames, prefix, localFilePath, gitInfo, pretend 
  * @returns {Promise<[{object}]>}
  */
 
-const requestCurrentlyReleasedVersions = (environments) => {
+const requestCurrentlyReleasedVersions = async (environments) => {
 
   // noinspection JSUnresolvedVariable
   const ssmKeys = environments.map(env => env.ssmKey);
 
-  const ssm = new AWS.SSM({
-    apiVersion: '2014-11-06'
-  });
+  const ssmClient = new SSMClient();
 
   const params = {
     Names: ssmKeys
   };
 
-  return new Promise((resolve, reject) => {
-    ssm.getParameters(params, (err, data) => {
-      if (err) {
-        return reject(err);
-      }
+  // Get data about what's currently released for each enviornment.
+  const command = new GetParametersCommand(params);
+  const response = await ssmClient.send(command);
 
-      const environmentsWithReleaseData = environments.map(env => {
-        // noinspection JSUnresolvedVariable
-        const value = _.find(data.Parameters, v => env.ssmKey === v.Name);
+  const environmentsWithReleaseData = environments.map(environment => {
 
-        env.releasedHash = _.get(value, "Value", "Unreleased!");
-        env.releaseHashShort = env.releasedHash === "Unreleased!" ? "Unreleased!" : utils.makeHashDigest(env.releasedHash)
-        env.releaseDateStr = _.get(value, "LastModifiedDate");
+    const param = response.Parameters.find(param => param.Name === environment.ssmKey);
 
-        return env;
-      });
+    const { Value: releasedHash = "Unreleased!", LastModifiedDate: releaseDate } = param;
 
-      return resolve(environmentsWithReleaseData);
-    });
+    // Fold in the data from SSM into the environment.
+    const releaseDateShort = releasedHash === "Unreleased!" ? "Unreleased!" : utils.makeHashDigest(releasedHash)
+    environment.releasedHash = releasedHash;
+    environment.releaseHashShort = releaseDateShort;
+    environment.releaseDate = releaseDate;
+    environment.releaseDateStr = releaseDate.toDateString();
+
+    return environment;
   });
+
+  return environmentsWithReleaseData;
 };
 
 const determineEnvironment = (cmdObj, environments) => {
@@ -151,52 +152,43 @@ const determineEnvironment = (cmdObj, environments) => {
  * @returns {Promise<[{object}]>}
  */
 
-const getDeployedVersionList = (bucketName, bucketPath) => {
-  const s3 = new AWS.S3({
-    apiVersion: '2006-03-01'
-  });
+const getDeployedVersionList = async (bucketName, bucketPath) => {
+  const client = new S3Client();
 
-  return new Promise((resolve, reject) => {
-    let allVersions = [];
-
-    const listAllVersions = (token) => {
-      const opts = {
+   const input = {
         Bucket: bucketName, // We want all gurgler.json keys, not any of the actual asset keys.
         Delimiter: "/", Prefix: bucketPath + "/",
       };
 
-      if (token) {
-        opts.ContinuationToken = token;
-      }
+  let allVersions = [];
 
-      s3.listObjectsV2(opts, (err, data) => {
-        if (err) {
-          reject()
-        }
+  // Get the first batch.
+  const command = new ListObjectsV2Command(input);
+  const response = await client.send(command);
+  allVersions = allVersions.concat(response.Contents);
 
-        const concatenated = allVersions.concat(data.Contents);
+  while(response.IsTruncated) {
+    // If there's more get those too
+    input.ContinuationToken = response.NextContinuationToken;
+    const command = new ListObjectsV2Command(input);
+    const response = await client.send(command);
 
-        // Make sure we're only ever pulling our gurgler.json manifest files.
-        allVersions = _.filter(concatenated, version => {
-          const {base, ext} = parse(version.Key);
-          return (ext === ".json" && base.split(".")[1] === "gurgler");
-        })
+    allVersions = allVersions.concat(response.Contents);
+  }
 
-        if (data.IsTruncated) {
-          listAllVersions(data.NextContinuationToken);
-        } else {
-          resolve(allVersions.map(version => {
-            return {
-              filepath: version.Key,
-              directoryPath: version.Key.split(".gurgler.json")[0],
-              lastModified: version.LastModified,
-              bucket: bucketName,
-            }
-          }));
-        }
-      });
-    };
-    listAllVersions();
+  // Make sure we're only ever pulling our gurgler.json manifest files.
+  allVersions = allVersions.filter(version => {
+  const {base, ext} = parse(version.Key);
+    return (ext === ".json" && base.split(".")[1] === "gurgler");
+  })
+
+  return allVersions.map(version => {
+    return {
+      filepath: version.Key,
+      directoryPath: version.Key.split(".gurgler.json")[0],
+      lastModified: version.LastModified,
+      bucket: bucketName,
+    }
   });
 };
 
@@ -277,28 +269,26 @@ const formatAndLimitDeployedVersions = (versions, size) => {
  */
 
 const addGitSha = async (version) => {
-  const s3 = new AWS.S3({
-    apiVersion: '2006-03-01'
-  });
+  const client = new S3Client();
+  const input = {
+    Bucket: version.bucket,
+    Key: version.filepath
+  };
+  const command = new HeadObjectCommand(input);
 
-  return new Promise((resolve, reject) => {
-    s3.headObject({
-      Bucket: version.bucket, Key: version.filepath
-    }, (err, data) => {
-      if (err) {
-        return reject(err);
-      }
+  const response = await client.send(command);
 
-      const metaData = data.Metadata['git-info'];
-      if (metaData !== '' && metaData !== undefined) {
-        const parsedMetaData = metaData.split('|');
-        version.gitSha = parsedMetaData[0];
-        version.gitShaDigest = makeHashDigest(parsedMetaData[0]);
-        version.gitBranch = parsedMetaData[1];
-      }
-      return resolve(version);
-    });
-  });
+  const metaData = response.Metadata['git-info'];
+  if (metaData !== '' && metaData !== undefined) {
+    const parsedMetaData = metaData.split('|');
+    version.gitSha = parsedMetaData[0];
+    version.gitShaDigest = makeHashDigest(parsedMetaData[0]);
+    version.gitBranch = parsedMetaData[1];
+  }
+
+  console.log("version", version);
+
+  return version;
 };
 
 const addGitInfo = async (version, packageName) => {
@@ -420,11 +410,7 @@ const sendReleaseMessage = (environment, version, packageName, slackConfig) => {
  * @param {object} slackConfig
  */
 
-const release = (environment, version, lambdaFunctions, packageName, slackConfig) => {
-  const lambda = new AWS.Lambda({
-    apiVersion: '2015-03-31'
-  });
-
+const release = async (environment, version, lambdaFunctions, packageName, slackConfig) => {
   if (!_.has(environment, 'serverEnvironment')) {
     throw new Error(`The server environment for this environment is not set: ${environment.key}`);
   }
@@ -438,25 +424,22 @@ const release = (environment, version, lambdaFunctions, packageName, slackConfig
   // noinspection JSUnresolvedVariable
   const functionName = lambdaFunctions[environment.serverEnvironment];
 
-  // noinspection JSUnresolvedVariable
-  const params = {
-    FunctionName: functionName, InvocationType: "RequestResponse", Payload: JSON.stringify({
-      parameterName: environment.ssmKey, parameterValue: version.hash,
-    })
-  }
+  const client = new LambdaClient();
+  const input = {
+      FunctionName: functionName, InvocationType: "RequestResponse", Payload: JSON.stringify({
+        parameterName: environment.ssmKey, parameterValue: version.hash,
+      })
+    };
+  const command = new InvokeCommand(input);
+  const response = await client.send(command);
 
-  lambda.invoke(params, (err, data) => {
-    if (err) {
-      throw err;
-    }
-    if (data.StatusCode !== 200) {
-      throw new Error(`unsuccessful lambda invocation; unable to release asset version; got status ${data.StatusCode}`);
-    }
-    if (data.FunctionError) {
-      throw new Error(`one or more parameter store values could not be updated: ${data.Payload}`);
-    }
-    sendReleaseMessage(environment, version, packageName, slackConfig);
-  });
+  if (response.StatusCode !== 200) {
+    throw new Error(`unsuccessful lambda invocation; unable to release asset version; got status ${response.StatusCode}`);
+  }
+  if (response.FunctionError) {
+    throw new Error(`one or more parameter store values could not be updated: ${response.Payload}`);
+  }
+  sendReleaseMessage(environment, version, packageName, slackConfig);
 };
 
 const confirmRelease = (environment, version, packageName) => {
@@ -620,20 +603,18 @@ const cleanupCmd = async (cmdObj, bucketNames, lambdaFunctions, environments, bu
             name: "reallyDelete",
             message: `Really delete these assets in the S3 bucket ${bucketName} with the path: ${bucketPath}?`,
             default: false
-          }).then(answers => {
+          }).then(async (answers) => {
             // noinspection JSUnresolvedVariable
             if (answers.reallyDelete) {
               for (const artifact of artifactsToDelete) {
 
                 console.log("Deleting", artifact.hash);
 
-                const s3 = new AWS.S3({
-                  apiVersion: '2006-03-01'
-                });
+                const client = new S3Client();
 
-                emptyS3Directory(s3, bucketName, artifact.directoryPath);
+                emptyS3Directory(client, bucketName, artifact.directoryPath);
 
-                const paramsOfObjectsToDelete = {
+                const input = {
                   Bucket: bucketName, Delete: {
                     Objects: [{
                       Key: artifact.filepath
@@ -643,10 +624,8 @@ const cleanupCmd = async (cmdObj, bucketNames, lambdaFunctions, environments, bu
                   }
                 };
 
-                s3.deleteObjects(paramsOfObjectsToDelete, function (err, data) {
-                  if (err) console.error(err, err.stack); // an error occurred
-                  else console.log(data);           // successful response
-                });
+                const command = new DeleteObjectsCommand(input);
+                await client.send(command);
               }
               console.log("Deleted.")
             } else {

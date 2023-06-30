@@ -2,7 +2,6 @@
 
 import {configureCmd, deployCmd, releaseCmd, cleanupCmd} from "./v2.mjs";
 import _ from "lodash";
-import AWS from 'aws-sdk';
 import {join} from "path";
 import {readFileSync} from "fs";
 import {Command} from "commander";
@@ -97,10 +96,6 @@ if (_.has(gurglerConfig, "slackWebHookUrl") || _.has(gurglerConfig, "slackUserna
     githubRepoUrl,
   }
 }
-
-AWS.config.update({
-  region: bucketRegion
-});
 
 /**
  * *****************
