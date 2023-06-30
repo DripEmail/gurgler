@@ -17,7 +17,7 @@ import * as utils from "./utils.mjs";
 
 /**
  * Send the file to S3. All files except gurgler.json are considered assets and will be prefixed with
- * the appropriate value. If there are more than 1 hierarchies to the prefix, gurgler.json will maintain
+ * the appropriate value. If there are more than 1 hierarchy to the prefix, gurgler.json will maintain
  * all prefixes save the last, to which it will be appended. For example, a prefix of assets/asdsf will
  * result in all assets being stored within that prefix but gurgler.json will become assets/asdf.gurgler.json.
  *
@@ -173,7 +173,7 @@ const getDeployedVersionList = async (bucketName, bucketPath) => {
     const command = new ListObjectsV2Command(input);
     const response = await client.send(command);
 
-    let allVersions = allVersions.concat(response.Contents);
+    allVersions = allVersions.concat(response.Contents);
   }
 
   // Make sure we're only ever pulling our gurgler.json manifest files.
