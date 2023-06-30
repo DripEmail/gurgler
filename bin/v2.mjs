@@ -53,16 +53,17 @@ const readFileAndDeploy = async (
     remoteFilePath = join(prefix, base);
   }
 
-  for (const bucketName of bucketNames) {
+  for (const bucketName in bucketNames) {
     if (pretend) {
       console.log(
-        `Only pretending to deploy ${localFilePath} to S3 bucket ${bucketName} ${remoteFilePath}`
+        `Only pretending to deploy ${localFilePath} to S3 bucket ${bucketNames[bucketName]} ${remoteFilePath}`
       );
     } else {
       const client = new S3Client();
       const input = {
         Key: remoteFilePath,
         Body: data,
+        Bucket: bucketNames[bucketName],
         ACL: "public-read",
         Metadata: { "git-info": gitInfo },
         ContentType: contentType,
@@ -72,7 +73,7 @@ const readFileAndDeploy = async (
       await client.send(command);
 
       console.log(
-        `Successfully deployed ${localFilePath} to S3 bucket ${bucketName} ${remoteFilePath}`
+        `Successfully deployed ${localFilePath} to S3 bucket ${bucketNames[bucketName]} ${remoteFilePath}`
       );
     }
   }
@@ -572,32 +573,24 @@ const configureCmd = (gurglerPath, bucketPath, commit, branch) => {
  * @param globs
  * @param pretend {boolean}
  */
-const deployCmd = (bucketNames, gurglerPath, globs, pretend = false) => {
-  readFile(gurglerPath, "utf-8", (err, data) => {
-    if (err) {
-      if (err.code === "ENOENT") {
-        console.log(
-          "Either gurgler.json has not been built or it has been removed. Run 'gurgler configure <git commit sha> <git branch>' and try again."
-        );
-      }
-      throw err;
-    }
+const deployCmd = async (bucketNames, gurglerPath, globs, pretend = false) => {
+  console.log("deployCmd", bucketNames, gurglerPath, globs, pretend);
 
-    let localFilePaths = [gurglerPath];
+  const data = await readFile(gurglerPath);
+  let localFilePaths = [gurglerPath];
 
-    globs.forEach((aGlob) => {
-      localFilePaths = localFilePaths.concat(
-        glob.sync(aGlob.pattern, {
-          ignore: aGlob.ignore,
-        })
-      );
-    });
+  globs.forEach((aGlob) => {
+    localFilePaths = localFilePaths.concat(
+      glob.sync(aGlob.pattern, {
+        ignore: aGlob.ignore,
+      })
+    );
+  });
 
-    const { prefix, raw } = JSON.parse(data);
+  const { prefix, raw } = JSON.parse(data);
 
-    localFilePaths.forEach((localFilePath) => {
-      readFileAndDeploy(bucketNames, prefix, localFilePath, raw, pretend);
-    });
+  localFilePaths.forEach((localFilePath) => {
+    readFileAndDeploy(bucketNames, prefix, localFilePath, raw, pretend);
   });
 };
 
