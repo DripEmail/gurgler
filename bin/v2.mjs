@@ -181,14 +181,14 @@ const getDeployedVersionList = async (bucketName, bucketPath) => {
 
   // Get the first batch.
   const command = new ListObjectsV2Command(input);
-  const response = await client.send(command);
+  let response = await client.send(command);
   allVersions = allVersions.concat(response.Contents);
 
   while (response.IsTruncated) {
     // If there's more get those too
     input.ContinuationToken = response.NextContinuationToken;
-    const command = new ListObjectsV2Command(input);
-    const response = await client.send(command);
+    const innerCommand = new ListObjectsV2Command(input);
+    response = await client.send(innerCommand);
 
     allVersions = allVersions.concat(response.Contents);
   }
