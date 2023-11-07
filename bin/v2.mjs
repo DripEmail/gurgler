@@ -5,7 +5,7 @@ import _ from "lodash";
 import { SSMClient, GetParametersCommand } from "@aws-sdk/client-ssm";
 import {
   S3Client,
-  ListObjectsV2Command,
+  ListObjectsCommand,
   HeadObjectCommand,
   DeleteObjectsCommand,
   PutObjectCommand,
@@ -180,14 +180,14 @@ const getDeployedVersionList = async (bucketName, bucketPath) => {
   let allVersions = [];
 
   // Get the first batch.
-  const command = new ListObjectsV2Command(input);
+  const command = new ListObjectsCommand(input);
   let response = await client.send(command);
   allVersions = allVersions.concat(response.Contents);
 
   while (response.IsTruncated) {
     // If there's more get those too
     input.ContinuationToken = response.NextContinuationToken;
-    const innerCommand = new ListObjectsV2Command(input);
+    const innerCommand = new ListObjectsCommand(input);
     response = await client.send(innerCommand);
 
     allVersions = allVersions.concat(response.Contents);
