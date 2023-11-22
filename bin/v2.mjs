@@ -15,7 +15,7 @@ import { getGitInfo } from "./git.mjs";
 import { IncomingWebhook } from "@slack/webhook";
 import { glob } from "glob";
 import { createHash } from "crypto";
-import { writeFile } from "fs";
+import { writeFile, statSync } from "fs";
 import { readFile } from "node:fs/promises";
 import * as utils from "./utils.mjs";
 
@@ -577,7 +577,7 @@ const configureCmd = (gurglerPath, bucketPath, commit, branch) => {
  * @param pretend {boolean}
  */
 const deployCmd = async (bucketRegion, bucketNames, gurglerPath, globs, pretend = false) => {
-  console.log("deployCmd", bucketNames, gurglerPath, globs, pretend);
+  console.log("deployCmd", bucketRegion, bucketNames, gurglerPath, globs, pretend);
 
   const data = await readFile(gurglerPath);
   let localFilePaths = [gurglerPath];
@@ -593,7 +593,10 @@ const deployCmd = async (bucketRegion, bucketNames, gurglerPath, globs, pretend 
   const { prefix, raw } = JSON.parse(data);
 
   localFilePaths.forEach((localFilePath) => {
-    readFileAndDeploy(bucketRegion, bucketNames, prefix, localFilePath, raw, pretend);
+    if(statSync(localFilePath).isFile()) {
+      // Skip anything that's not a file (like a directory).
+      readFileAndDeploy(bucketRegion, bucketNames, prefix, localFilePath, raw, pretend);
+    }
   });
 };
 
