@@ -11,6 +11,9 @@
   "bin": {
     "gurgler": "bin/gurgler.js"
   },
+  "engines": {
+    "node": ">=20.9.0 <21"
+  },
   "dependencies": {
     "@aws-sdk/client-lambda": "^3.446.0",
     "@aws-sdk/client-s3": "^3.445.0",
