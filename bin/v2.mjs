@@ -570,12 +570,13 @@ const configureCmd = (gurglerPath, bucketPath, commit, branch) => {
 
 /**
  *
+ * @param bucketRegion
  * @param bucketNames
  * @param gurglerPath
  * @param globs
  * @param pretend {boolean}
  */
-const deployCmd = async (bucketNames, gurglerPath, globs, pretend = false) => {
+const deployCmd = async (bucketRegion, bucketNames, gurglerPath, globs, pretend = false) => {
   console.log("deployCmd", bucketNames, gurglerPath, globs, pretend);
 
   const data = await readFile(gurglerPath);
@@ -592,7 +593,7 @@ const deployCmd = async (bucketNames, gurglerPath, globs, pretend = false) => {
   const { prefix, raw } = JSON.parse(data);
 
   localFilePaths.forEach((localFilePath) => {
-    readFileAndDeploy(bucketNames, prefix, localFilePath, raw, pretend);
+    readFileAndDeploy(bucketRegion, bucketNames, prefix, localFilePath, raw, pretend);
   });
 };
 
