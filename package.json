@@ -11,16 +11,19 @@
   "bin": {
     "gurgler": "bin/gurgler.js"
   },
+  "engines": {
+    "node": ">=20.9.0 <21"
+  },
   "dependencies": {
-    "@aws-sdk/client-lambda": "^3.441.0",
-    "@aws-sdk/client-s3": "^3.441.0",
-    "@aws-sdk/client-ssm": "^3.441.0",
+    "@aws-sdk/client-lambda": "^3.446.0",
+    "@aws-sdk/client-s3": "^3.445.0",
+    "@aws-sdk/client-ssm": "^3.445.0",
     "@slack/webhook": "7.0.1",
     "commander": "11.1.0",
     "crypto-js": "4.2.0",
     "dotenv": "16.3.1",
     "glob": "^10.3.10",
-    "inquirer": "9.2.11",
+    "inquirer": "9.2.12",
     "lodash": "4.17.21"
   },
   "devDependencies": {

@@ -5,7 +5,7 @@ import _ from "lodash";
 import { SSMClient, GetParametersCommand } from "@aws-sdk/client-ssm";
 import {
   S3Client,
-  ListObjectsV2Command,
+  ListObjectsCommand,
   HeadObjectCommand,
   DeleteObjectsCommand,
   PutObjectCommand,
@@ -25,6 +25,7 @@ import * as utils from "./utils.mjs";
  * all prefixes save the last, to which it will be appended. For example, a prefix of assets/asdsf will
  * result in all assets being stored within that prefix but gurgler.json will become assets/asdf.gurgler.json.
  *
+ * @param {string} region
  * @param {array} bucketNames
  * @param {string} prefix
  * @param {string} localFilePath
@@ -33,6 +34,7 @@ import * as utils from "./utils.mjs";
  */
 
 const readFileAndDeploy = async (
+  region,
   bucketNames,
   prefix,
   localFilePath,
@@ -59,7 +61,7 @@ const readFileAndDeploy = async (
         `Only pretending to deploy ${localFilePath} to S3 bucket ${bucketNames[bucketName]} ${remoteFilePath}`
       );
     } else {
-      const client = new S3Client();
+      const client = new S3Client({region: region});
       const input = {
         Key: remoteFilePath,
         Body: data,
@@ -180,14 +182,14 @@ const getDeployedVersionList = async (bucketName, bucketPath) => {
   let allVersions = [];
 
   // Get the first batch.
-  const command = new ListObjectsV2Command(input);
+  const command = new ListObjectsCommand(input);
   let response = await client.send(command);
   allVersions = allVersions.concat(response.Contents);
 
   while (response.IsTruncated) {
     // If there's more get those too
     input.ContinuationToken = response.NextContinuationToken;
-    const innerCommand = new ListObjectsV2Command(input);
+    const innerCommand = new ListObjectsCommand(input);
     response = await client.send(innerCommand);
 
     allVersions = allVersions.concat(response.Contents);
@@ -641,11 +643,23 @@ const releaseCmd = (
     .catch((err) => console.error(err));
 };
 
+/**
+ *
+ * @param cmdObj
+ * @param bucketNames
+ * @param lambdaFunctions
+ * @param {array} environments
+ * @param {string} bucketRegion
+ * @param bucketPath
+ * @param packageName
+ * @returns {Promise<void>}
+ */
 const cleanupCmd = async (
   cmdObj,
   bucketNames,
   lambdaFunctions,
   environments,
+  bucketRegion,
   bucketPath,
   packageName
 ) => {
