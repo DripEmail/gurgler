@@ -1,5 +1,5 @@
 import inquirer from 'inquirer';
-import {readFile} from "fs";
+import {readFile, statSync} from "fs";
 import {join, parse} from "path";
 import {emptyS3Directory, getContentType, makeHashDigest} from "./utils.mjs";
 import _ from "lodash";
@@ -526,7 +526,10 @@ const deployCmd = (bucketNames, gurglerPath, globs, pretend = false) => {
     const {prefix, raw} = JSON.parse(data)
 
     localFilePaths.forEach(localFilePath => {
-      readFileAndDeploy(bucketNames, prefix, localFilePath, raw, pretend);
+      if(statSync(localFilePath).isFile()) {
+          // Skip anything that's not a file (like a directory).
+        readFileAndDeploy(bucketNames, prefix, localFilePath, raw, pretend);
+      }
     });
   });
 }
