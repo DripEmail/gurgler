@@ -12,7 +12,7 @@
     "gurgler": "bin/gurgler.js"
   },
   "dependencies": {
-    "@slack/webhook": "6.1.0",
+    "@slack/webhook": "7.0.2",
     "aws-sdk": "2.1408.0",
     "commander": "11.0.0",
     "crypto-js": "4.2.0",
