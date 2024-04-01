@@ -282,7 +282,7 @@ const formatAndLimitDeployedVersions = (versions, size) => {
       }
     });
 
-  return returnedVersions;
+  return _.uniqBy(returnedVersions, (v) => v.hashDigest);
 };
 
 /**
