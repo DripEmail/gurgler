@@ -186,7 +186,7 @@ const getDeployedVersionList = async (bucketName, bucketPath) => {
   let response = await client.send(command);
   allVersions = allVersions.concat(response.Contents);
 
-  while (response.IsTruncated) {
+  if (response.IsTruncated) {
     // If there's more get those too
     input.ContinuationToken = response.NextContinuationToken;
     const innerCommand = new ListObjectsCommand(input);
@@ -282,7 +282,7 @@ const formatAndLimitDeployedVersions = (versions, size) => {
       }
     });
 
-  return returnedVersions;
+  return _.uniqBy(returnedVersions, (v) => v.hashDigest);
 };
 
 /**
