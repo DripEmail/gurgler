@@ -523,14 +523,14 @@ const confirmRelease = (environment, version, packageName) => {
       if (
         answers.confirmation &&
         environment.masterOnly &&
-        version.gitBranch !== "master"
+        version.gitBranch !== "main"
       ) {
         // noinspection JSUnresolvedVariable
         return inquirer.prompt([
           {
             type: "confirm",
             name: "confirmation",
-            message: `Warning: You are attempting to release a non-master branch[${version.gitBranch}] to a master-only environment[${environment.serverEnvironment}]. Do you wish to proceed?`,
+            message: `Warning: You are attempting to release a non-main branch[${version.gitBranch}] to a main-only environment[${environment.serverEnvironment}]. Do you wish to proceed?`,
           },
         ]);
       }
