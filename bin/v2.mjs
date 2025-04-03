@@ -415,35 +415,28 @@ const determineVersionToRelease = (
  * @param {object} environment The users chosen environment.
  * @param {object} version The users chosen version.
  * @param packageName
- * @param slackConfig
+ * @param githubRepoUrl
  */
 
-const sendReleaseMessage = (environment, version, packageName, slackConfig) => {
+const sendReleaseMessage = (environment, version, packageName, githubRepoUrl) => {
   const userDoingDeploy = process.env.USER;
   const simpleMessage = `\n> ${userDoingDeploy} successfully released the version ${packageName}[${version.gitSha}] to ${environment.key}\n`;
 
-  if (slackConfig) {
+  if (!_.isEmpty(environment.slackWebHookUrl)) {
     const slackMessage = [
       `*${userDoingDeploy}* successfully released a new ${packageName} version to *${environment.key}*`,
       `_${version.displayName}_`,
-      `<${slackConfig.githubRepoUrl}/commit/${version.gitSha}|View commit on GitHub>`,
+      `<${githubRepoUrl}/commit/${version.gitSha}|View commit on GitHub>`,
     ].join("\n");
 
-    // noinspection JSUnresolvedVariable
-    const slackChannel = environment.slackChannel;
+    const webhook = new IncomingWebhook(environment.slackWebHookUrl);
 
-    if (!_.isEmpty(slackConfig.slackWebHookUrl) && !_.isEmpty(slackChannel)) {
-      const webhook = new IncomingWebhook(slackConfig.slackWebHookUrl);
+    (async () => {
+      await webhook.send({
+        text: slackMessage,
+      });
+    })().catch((err) => console.error(err));
 
-      (async () => {
-        await webhook.send({
-          username: slackConfig.slackUsername,
-          text: slackMessage,
-          icon_emoji: slackConfig.slackIconEmoji,
-          channel: slackChannel,
-        });
-      })().catch((err) => console.error(err));
-    }
   }
 
   console.log(simpleMessage);
@@ -456,7 +449,7 @@ const sendReleaseMessage = (environment, version, packageName, slackConfig) => {
  * @param {object} version
  * @param {object} lambdaFunctions
  * @param {string} packageName
- * @param {object} slackConfig
+ * @param {object} githubRepoUrl
  */
 
 const release = async (
@@ -464,7 +457,7 @@ const release = async (
   version,
   lambdaFunctions,
   packageName,
-  slackConfig
+  githubRepoUrl
 ) => {
   if (!_.has(environment, "serverEnvironment")) {
     throw new Error(
@@ -505,7 +498,7 @@ const release = async (
       `one or more parameter store values could not be updated: ${response.Payload}`
     );
   }
-  sendReleaseMessage(environment, version, packageName, slackConfig);
+  sendReleaseMessage(environment, version, packageName, githubRepoUrl);
 };
 
 const confirmRelease = (environment, version, packageName) => {
@@ -607,7 +600,7 @@ const releaseCmd = (
   environments,
   bucketPath,
   packageName,
-  slackConfig
+  githubRepoUrl
 ) => {
   let environment;
   let version;
@@ -638,7 +631,7 @@ const releaseCmd = (
           version,
           lambdaFunctions,
           packageName,
-          slackConfig
+          githubRepoUrl
         );
       } else {
         console.log("Cancelling release...");
