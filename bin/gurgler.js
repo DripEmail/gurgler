@@ -29,12 +29,8 @@ const lambdaFunctions = gurglerConfig["lambdaFunctions"];
 const bucketPath = gurglerConfig["bucketPath"];
 const bucketRegion = gurglerConfig["bucketRegion"];
 const globs = gurglerConfig["localFileGlobs"];
-const slackWebHookUrl = gurglerConfig["slackWebHookUrl"];
-const slackUsername = gurglerConfig["slackUsername"];
-const slackIconEmoji = gurglerConfig["slackIconEmoji"];
 const githubRepoUrl = gurglerConfig["githubRepoUrl"];
 
-let slackConfig;
 
 if (_.isEmpty(packageName)) {
   console.error("The package name is not set.");
@@ -59,42 +55,6 @@ if (_.isEmpty(bucketPath)) {
 if (_.isEmpty(bucketRegion)) {
   console.error("The config value bucketRegion is not set.");
   process.exit(1);
-}
-
-// If at least one slack-related key is present in the gurgler config it is assumed Slack should be
-// used and all Slack config values are inspected. The omission of all slack-related keys rather
-// obviously indicates Slack is not intended to be used, and we don"t need to inspect each key.
-if (
-  _.has(gurglerConfig, "slackWebHookUrl") ||
-  _.has(gurglerConfig, "slackUsername") ||
-  _.has(gurglerConfig, "slackIconEmoji")
-) {
-  if (_.isEmpty(slackWebHookUrl)) {
-    console.error("The config value slackWebHookUrl is not set.");
-    process.exit(1);
-  }
-
-  if (_.isEmpty(slackUsername)) {
-    console.error("The config value slackUsername is not set.");
-    process.exit(1);
-  }
-
-  if (_.isEmpty(slackIconEmoji)) {
-    console.error("The config value slackIconEmoji is not set.");
-    process.exit(1);
-  }
-
-  if (_.isEmpty(githubRepoUrl)) {
-    console.error("The config value githubRepoUrl is not set.");
-    process.exit(1);
-  }
-
-  slackConfig = {
-    slackWebHookUrl,
-    slackUsername,
-    slackIconEmoji,
-    githubRepoUrl,
-  };
 }
 
 /**
@@ -203,7 +163,7 @@ program
       environments,
       bucketPath,
       packageName,
-      slackConfig,
+      githubRepoUrl,
     );
   });
 
@@ -222,7 +182,7 @@ program
       bucketRegion,
       bucketPath,
       packageName,
-      slackConfig,
+      githubRepoUrl,
     );
   });
 

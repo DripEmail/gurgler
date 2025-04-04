@@ -41,22 +41,19 @@ Add a `gurgler` key to your `package.json`. It should look something like this:
         "ssmKey": "/dev/asset-checksum",
         "serverEnvironment": "development",
         "label": "Development",
-        "slackChannel": "#deployments"
+        "slackWebHookUrl": "http://hooks.slack.com/services/Something/Something/Something",
       },
       {
         "key": "production",
         "ssmKey": "/production/asset-checksum",
         "serverEnvironment": "production",
         "label": "Production",
-        "slackChannel": "#deployments"
+        "slackWebHookUrl": "http://hooks.slack.com/services/Something/Something/Something",
       }
     ],
     "localFilePaths": [
       "./dist/my-asset.js"
     ],
-    "slackWebHookUrl": "http://hooks.slack.com/services/Something/Something/Something",
-    "slackUsername": "Something",
-    "slackIconEmoji": ":something:",
     "githubRepoUrl": "https://github.com/User/repo"
     }
 }
