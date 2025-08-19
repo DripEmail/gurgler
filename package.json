@@ -23,7 +23,7 @@
     "crypto-js": "4.2.0",
     "dotenv": "16.3.1",
     "glob": "^10.3.10",
-    "inquirer": "9.2.12",
+    "inquirer": "12.9.3",
     "lodash": "4.17.21"
   },
   "devDependencies": {
